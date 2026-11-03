@@ -1310,6 +1310,9 @@ const A = {
       r.pedidos.forEach(p => { if(mapa[p.clienteId]) p.clienteId = mapa[p.clienteId]; });
       if(nuevos.length && !(await saveMany('clientes', nuevos, prog))) return; }
     if(r.pedidos.length){ if(!(await saveMany('pedidos', r.pedidos, prog))) return; partes.push(r.pedidos.length.toLocaleString('es-AR')+' pedidos'); }
+    // Una planilla de un año anterior no pisa la lista de precios mayorista actual.
+    const ultMay = pedidosArr().filter(p=>p.canal==='Mayorista' && p.origen==='planilla' && !r.pedidos.some(x=>x.id===p.id)).reduce((a,p)=>p.entrega>a?p.entrega:a,'');
+    if(r.listaMay.length && r.hasta && ultMay && r.hasta < ultMay){ partes.push('lista de precios no actualizada (la planilla es de un año anterior)'); r.listaMay = []; }
     if(r.listaMay.length){ const items = clone(catalogo()); const idx = {}; items.forEach(p=>{ idx[norm(p.nombre).trim()] = p; }); let nuevos=0;
       r.listaMay.forEach(l => { const p = idx[norm(l.nombre).trim()]; if(p) p.precioMay = l.precioMay; else { nuevos++; items.push({id:'pm'+hashTxt(l.nombre), nombre:l.nombre, cat:'Mayorista', precio:null, precioMay:l.precioMay}); } });
       await saveDoc('catalogo', {items}); partes.push(r.listaMay.length+' precios mayoristas'+(nuevos?' ('+nuevos+' productos nuevos)':'')); }
