@@ -286,8 +286,11 @@ function metricas(mes){
   const fijos = sum(gastos.filter(g=>g.tipo==='fijo'), g=>num(g.monto));
   const variables = sum(gastos.filter(g=>g.tipo!=='fijo'), g=>num(g.monto));
   const sueldos = sum(Object.values(S.horas).filter(h=>(h.fecha||'').startsWith(mes)), h=>num(h.importe));
-  const ganancia = facturado - costo - fijos - variables - sueldos;
-  return { sueldos, facturado, costo, envios, entregados, cantPedidos: delMes.length, cobrado, porCobrar, fijos, variables, ganancia, margen: facturado? ganancia/facturado : null, cobertura: facturado? factReal/facturado : 0, rank: Object.values(rank) };
+  // Compras reales del mes: facturas y remitos de proveedores (+ND −NC). Si hay, la ganancia usa esto y no la estimación por recetas.
+  const compras = sum(Object.values(S.movprov||{}).filter(x=>(x.fecha||'').startsWith(mes)), x => { const t=num(x.total); return x.tipo==='NC' ? -t : (x.tipo==='PAGO' ? 0 : t); });
+  const usaCompras = compras > 0;
+  const ganancia = facturado - (usaCompras ? compras : costo) - fijos - variables - sueldos;
+  return { compras, usaCompras, sueldos, facturado, costo, envios, entregados, cantPedidos: delMes.length, cobrado, porCobrar, fijos, variables, ganancia, margen: facturado? ganancia/facturado : null, cobertura: facturado? factReal/facturado : 0, rank: Object.values(rank) };
 }
 function saldoCliente(cid){ return sum(pedidosArr().filter(p=>p.clienteId===cid && p.estado!=='cancelado'), p=>Math.max(0,totPedido(p).saldo)); }
 
@@ -429,7 +432,7 @@ R.inicio = function(){
       <button class="btn" data-act="mes" data-n="1" aria-label="Mes siguiente">›</button>
     </div>
     <div class="hero">
-      <span class="eyebrow" style="color:inherit;opacity:.75">Ganancia neta estimada</span>
+      <span class="eyebrow" style="color:inherit;opacity:.75">${m.usaCompras?'Ganancia neta del mes':'Ganancia neta estimada'}</span>
       <span class="big num">${$(m.ganancia)}</span>
       <div class="sub"><span>Margen neto <b class="num">${pct(m.margen)}</b></span><span>${m.cantPedidos} pedidos del mes · ${m.entregados} entregados</span></div>
     </div>
@@ -437,14 +440,14 @@ R.inicio = function(){
       ${tile('Facturado',$(m.facturado),'productos, sin envíos')}
       ${tile('Cobrado',$(m.cobrado),'pagos y señas del mes')}
       ${tile('Por cobrar',$(m.porCobrar),'saldos pendientes', m.porCobrar>0?'':'')}
-      ${tile('Costo de productos',$(m.costo), m.facturado? pct(m.costo/m.facturado)+' de lo facturado':'')}
+      ${m.usaCompras ? tile('Compras a proveedores',$(m.compras),'facturas y remitos del mes'+(m.facturado?' · '+pct(m.compras/m.facturado):'')) : tile('Costo de productos',$(m.costo), m.facturado? pct(m.costo/m.facturado)+' de lo facturado':'')}
       ${tile('Gastos fijos',$(m.fijos),'<a href="#gastos">ver gastos</a>')}
       ${tile('Gastos variables',$(m.variables),'')}
       ${tile('Sueldos por horas',$(m.sueldos),'<a href="#empleados">ver empleados</a>')}
       ${tile('Envíos cobrados',$(m.envios),'van aparte, no suman ganancia')}
       ${tile('Pedidos entregados',String(m.entregados),'de '+m.cantPedidos+' del mes')}
     </div>
-    ${m.facturado ? '<div class="note">El costo sale de tus recetas para el '+pct(m.cobertura)+' de lo facturado. Para el resto se estima un '+num(n.costoDefault)+'% del precio (lo cambiás en <a href="#ajustes">Ajustes</a>). Cuantas más recetas cargues, más exacta la ganancia.</div>' : ''}
+    ${m.usaCompras ? '<div class="note">Ganancia = facturado − compras a proveedores − gastos − sueldos del mes. Si una factura de proveedor o un sueldo todavía no está cargado, el mes da de más.</div>' : m.facturado ? '<div class="note">El costo sale de tus recetas para el '+pct(m.cobertura)+' de lo facturado. Para el resto se estima un '+num(n.costoDefault)+'% del precio (lo cambiás en <a href="#ajustes">Ajustes</a>). Cuantas más recetas cargues, más exacta la ganancia.</div>' : ''}
     <div class="quick">
       <button class="btn" data-act="nuevoPedido">${svg('bag')}Nuevo pedido</button>
       <button class="btn" data-act="ventaLocal">${svg('cash')}Venta local</button>
