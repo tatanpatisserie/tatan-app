@@ -63,7 +63,8 @@ function onWriteError(e){
   const m = (e && (e.message||'')) + '';
   if(/row-level security|permission|sin permiso/i.test(m)){ toast('No se guardó: tu sector no tiene permiso para esto.'); return; }
   if(/id_valido|tamano_valido/i.test(m)){ toast('No se guardó: el dato tiene un formato no permitido.'); return; }
-  toast('No se pudo guardar. Revisá la conexión y probá de nuevo.');
+  if(!navigator.onLine){ toast('No se pudo guardar: no hay conexión a internet.'); return; }
+  toast('No se pudo guardar ('+(e&&(e.code||e.status)||'error')+'): '+m.slice(0,120));
 }
 async function rpc(fn, args){ const { error } = await sb.rpc(fn, args); if(error) onWriteError(error); }
 
@@ -123,7 +124,9 @@ function aplicarCambio(col, pl){
 }
 async function saveMany(col, arr, prog){
   const now = new Date().toISOString(); const n = Object.assign({}, S[col]);
-  const rows = arr.map(o => { const id=o.id||uid(); const body=clone(o); delete body.id; body.updatedAt=now; n[id]=Object.assign({id},body); return {id, data:body, updated_at:now}; });
+  // Una misma fila no puede ir dos veces en el mismo envío (la base lo rechaza): si se repite, se juntan sus datos.
+  const porId = new Map(); arr.forEach(o => { const id=o.id||uid(); porId.set(id, Object.assign(porId.get(id)||{}, o, {id})); });
+  const rows = [...porId.values()].map(o => { const id=o.id; const body=clone(o); delete body.id; body.updatedAt=now; n[id]=Object.assign({id},body); return {id, data:body, updated_at:now}; });
   for(let i=0;i<rows.length;i+=500){ const { error } = await sb.from(col).upsert(rows.slice(i,i+500)); if(error){ onWriteError(error); return false; } if(prog) prog(Math.min(rows.length,i+500), rows.length); }
   S[col]=n; render(); return true;
 }
@@ -1164,8 +1167,12 @@ function leerLibro(wb){
     const iE=ix('EMPLEADO');
     if(iE>=0 && ix('CUIL')>=0){ // nómina
       const iCl=ix('CUIL'), iPu=ix('PUESTO'), iHo=ix('HORARIO'), iIn=ix('FECHA INICIO');
-      filas.slice(h+1).forEach(f => { const n=String(f[iE]||'').trim(); if(!n || /^(EMPLEADO|EFECTIVOS|EVENTUALES)$/i.test(n)) return; const id=empKey(n);
-        out.empleados.push(Object.assign({id, nombre:n, activo:true, origen:'planilla'}, f[iCl]?{cuil:String(f[iCl]).trim()}:{}, iPu>=0&&f[iPu]?{puesto:String(f[iPu]).trim()}:{}, iHo>=0&&f[iHo]?{horario:String(f[iHo]).trim()}:{}, iIn>=0&&aFecha(f[iIn])?{inicio:aFecha(f[iIn])}:{})); });
+      // La nómina termina donde empiezan otras listas (libretas sanitarias, turnos por día): ahí no hay CUIL sino DNI.
+      let corte=false; const vistos=new Set();
+      filas.slice(h+1).forEach(f => { const n=String(f[iE]||'').trim(); if(corte) return; if(/^(LIBRETAS|NOMBRE Y APELLIDO)/i.test(norm(n))){ corte=true; return; }
+        if(!n || /^(EMPLEADO|EFECTIVOS|EVENTUALES|TEMPORAL(ES)?|MONOTRIBUTO|CONTRATADOS?)$/i.test(norm(n))) return; const id=empKey(n); if(vistos.has(id)) return; vistos.add(id);
+        const cl=String(f[iCl]||'').replace(/\D/g,'');
+        out.empleados.push(Object.assign({id, nombre:n, activo:true, origen:'planilla'}, cl.length===11?{cuil:cl}:{}, iPu>=0&&f[iPu]?{puesto:String(f[iPu]).trim()}:{}, iHo>=0&&f[iHo]?{horario:String(f[iHo]).trim()}:{}, iIn>=0&&aFecha(f[iIn])?{inicio:aFecha(f[iIn])}:{})); });
       return;
     }
     if(iE>=0 && iF>=0 && ix('CANT. HORAS')>=0){ // horas trabajadas
@@ -1281,15 +1288,25 @@ const A = {
       r.listaMay.forEach(l => { const p = idx[norm(l.nombre).trim()]; if(p) p.precioMay = l.precioMay; else { nuevos++; items.push({id:'pm'+hashTxt(l.nombre), nombre:l.nombre, cat:'Mayorista', precio:null, precioMay:l.precioMay}); } });
       await saveDoc('catalogo', {items}); partes.push(r.listaMay.length+' precios mayoristas'+(nuevos?' ('+nuevos+' productos nuevos)':'')); }
     if(r.empleados.length){ const merged = r.empleados.map(e => Object.assign({}, e, S.empleados[e.id]||{}, {cuil:e.cuil||(S.empleados[e.id]||{}).cuil})); if(!(await saveMany('empleados', merged, prog))) return; partes.push(r.empleados.length+' empleados'); }
-    if(r.horas.length){ const nuevos={}; r.horas.forEach(t=>{ const k=empKey(t.empleado); if(!S.empleados[k] && !nuevos[k]) nuevos[k]={id:k, nombre:t.empleado, puesto:t.rubro, activo:true, origen:'planilla'}; });
-      const recientes = {}; r.horas.forEach(t=>{ const k=empKey(t.empleado); if(!recientes[k]||t.fecha>recientes[k].fecha) recientes[k]=t; });
+    if(r.horas.length){
+      // En las horas a veces el nombre está corto ("FIORELLA DARCHIVIO") y en la nómina completo ("FIORELLA CAROLINA D'ARCHIVIO"): se unen a la misma persona.
+      const toks = n => norm(n).replace(/[^a-z\s]/g,'').split(/\s+/).filter(Boolean);
+      const base = [...new Map([...r.empleados, ...Object.values(S.empleados)].map(e=>[e.id,e])).values()];
+      const cache = {};
+      const resolver = n => { if(cache[n]!==undefined) return cache[n]; const k=empKey(n); let id=k;
+        if(!base.some(e=>e.id===k)){ const tk=toks(n); const cand = tk.length>=2 ? base.filter(e=>{ const et=toks(e.nombre); return tk.every(x=>et.includes(x)); }) : []; if(cand.length===1) id=cand[0]; }
+        return cache[n]=id; };
+      // Las horas se vinculan a la persona por el nombre: se usa el nombre de la nómina.
+      r.horas.forEach(t=>{ const m = resolver(t.empleado); if(typeof m==='object'){ t.empleado = m.nombre; } t.empleadoId = empKey(t.empleado); });
+      const nuevos={}; r.horas.forEach(t=>{ const k=t.empleadoId; if(!S.empleados[k] && !nuevos[k]) nuevos[k]={id:k, nombre:t.empleado, puesto:t.rubro, activo:true, origen:'planilla'}; });
+      const recientes = {}; r.horas.forEach(t=>{ const k=t.empleadoId; if(!recientes[k]||t.fecha>recientes[k].fecha) recientes[k]=t; });
       Object.values(nuevos).forEach(e=>{ const t=recientes[e.id]; e.tarifa=t?t.tarifa:''; e.activo = !!(t && t.fecha >= addDays(today(),-60)); });
       if(Object.keys(nuevos).length && !(await saveMany('empleados', Object.values(nuevos)))) return;
       if(!(await saveMany('horas', r.horas, prog))) return; partes.push(r.horas.length.toLocaleString('es-AR')+' turnos'); }
     if(r.gastos.length){ if(!(await saveMany('gastos', r.gastos, prog))) return; partes.push(r.gastos.length.toLocaleString('es-AR')+' gastos'); }
     SH.draft.prog=''; SH.draft.listo = 'Se guardaron '+partes.join(', ')+'.'; renderSheet(); },
   exportar: async () => {
-    if(!window.XLSX){ toast('Preparando la copia…'); await new Promise((ok,ko)=>{ const sc=document.createElement('script'); sc.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js'; sc.onload=ok; sc.onerror=ko; document.head.appendChild(sc); }).catch(()=>{}); }
+    if(!window.XLSX){ toast('Preparando la copia…'); await new Promise((ok,ko)=>{ const sc=document.createElement('script'); sc.src='vendor/xlsx.full.min.js'; sc.onload=ok; sc.onerror=ko; document.head.appendChild(sc); }).catch(()=>{}); }
     if(!window.XLSX){ toast('No se pudo preparar el Excel. Revisá la conexión.'); return; }
     const wb = XLSX.utils.book_new();
     const plano = v => v==null ? '' : (typeof v==='object' ? JSON.stringify(v) : v);
