@@ -470,7 +470,7 @@ R.inicio = function(){
 };
 const byEntrega = (a,b) => ((a.entrega||'')+(a.hora||'')).localeCompare((b.entrega||'')+(b.hora||''));
 const ESTADOS = {pendiente:['Pendiente','p-neu'], produccion:['En producción','p-pis'], listo:['Listo','p-acc'], entregado:['Entregado','p-ok'], cancelado:['Cancelado','p-bad']};
-const CANALES = ['Pedido particular','Local','Evento','Mayorista','Empresa','Cuenta corriente'];
+const CANALES = ['Pedido particular','Local','Evento','Fecha especial','Mayorista','Empresa','Cuenta corriente'];
 const MEDIOS = ['Efectivo','Transferencia','QR Galicia','Mercado Pago','Tarjeta','Cuenta corriente'];
 function saldoPill(p){ const t = totPedido(p); if(t.aCobrar<=0) return ''; if(t.saldo<=0.5) return '<span class="pill p-ok">Pagado</span>'; if(t.pagado>0) return '<span class="pill p-warn">Debe '+$(t.saldo)+'</span>'; return '<span class="pill p-bad">Sin seña</span>'; }
 function pedidoItem(p){
@@ -1026,7 +1026,7 @@ SHEETS.importar = function(){
     body += '<div class="card stack" style="gap:6px"><b>'+esc(d.archivo||'')+'</b>'+
       (r.movprov.length?'<div class="row between"><span>Comprobantes de proveedores</span><b class="num">'+r.movprov.length.toLocaleString('es-AR')+'</b></div>':'')+
       (r.proveedores.length?'<div class="row between"><span>Proveedores con datos (CUIT, CBU…)</span><b class="num">'+r.proveedores.length+'</b></div>':'')+
-      (r.pedidos.length?'<div class="row between"><span>Pedidos'+(r.pedidos.some(p=>p.origen==='bistrosoft')?' (días de venta del local)':r.pedidos.some(p=>p.origen==='cocina')?' de la semana (cocina)':r.pedidos.some(p=>p.canal==='Mayorista')?' mayoristas':' minoristas')+'</span><b class="num">'+r.pedidos.length.toLocaleString('es-AR')+'</b></div><div class="row between"><span class="muted">Clientes</span><b class="num">'+r.clientes.length.toLocaleString('es-AR')+'</b></div>':'')+
+      (r.pedidos.length?'<div class="row between"><span>Pedidos'+(r.pedidos.some(p=>p.origen==='fechaespecial')?' (meses con ventas de fecha especial)':r.pedidos.some(p=>p.origen==='bistrosoft')?' (días de venta del local)':r.pedidos.some(p=>p.origen==='cocina')?' de la semana (cocina)':r.pedidos.some(p=>p.canal==='Mayorista')?' mayoristas':' minoristas')+'</span><b class="num">'+r.pedidos.length.toLocaleString('es-AR')+'</b></div><div class="row between"><span class="muted">Clientes</span><b class="num">'+r.clientes.length.toLocaleString('es-AR')+'</b></div>':'')+
       (r.listaMay.length?'<div class="row between"><span>Lista de precios mayorista</span><b class="num">'+r.listaMay.length+'</b></div>':'')+
       (r.empleados.length?'<div class="row between"><span>Empleados (nómina)</span><b class="num">'+r.empleados.length+'</b></div>':'')+
       (r.horas.length?'<div class="row between"><span>Turnos y horas trabajadas</span><b class="num">'+r.horas.length.toLocaleString('es-AR')+'</b></div>':'')+
@@ -1167,6 +1167,21 @@ function leerBistrosoft(filas, out, marcar){
     marcar(fecha); });
   return true;
 }
+function leerEstadoResultado(filas, nombreHoja, out, marcar){
+  // RESUMEN VENTAS → "ESTADO DE RESULTADO …": se toma solo la fila FECHA ESPECIAL (Día de la Madre, Navidad, etc.), que no está en otra planilla.
+  if(!/^estado de resultado/i.test(nombreHoja.trim())) return false;
+  const MES={ene:1,feb:2,mar:3,abr:4,may:5,jun:6,jul:7,ago:8,sep:9,sept:9,set:9,oct:10,nov:11,dic:12};
+  const aMes = v => { if(typeof v==='number' || v instanceof Date){ const f=aFecha(v); return f?f.slice(0,7):''; }
+    const m=norm(v).trim().match(/^([a-z]+)[\s\-\/.]*(\d{2,4})$/); if(!m||!MES[m[1]]) return ''; const y=m[2].length===2?'20'+m[2]:m[2]; return y+'-'+pad(MES[m[1]]); };
+  let cab=null; filas.slice(0,6).forEach(f=>{ if(!cab && f.filter(c=>aMes(c)).length>=3) cab=f; });
+  const fila = filas.find(f=>/^fecha especial$/i.test(norm(f[0]).trim()));
+  if(!cab || !fila) return true;
+  cab.forEach((c,j)=>{ const mes=aMes(c); const monto=aPlata(fila[j]); if(!mes||!monto) return;
+    const [y,m]=mes.split('-').map(Number); const fecha=mes+'-'+pad(new Date(y,m,0).getDate());
+    out.pedidos.push({id:'fe-'+mes, clienteNombre:'Fechas especiales', canal:'Fecha especial', entrega:fecha, hora:'', estado:'entregado', items:[{pid:'', nombre:'Ventas de fecha especial', cant:1, precio:Math.round(monto*100)/100}], descuento:'', envio:'',
+      pagos:[{f:fecha, monto:Math.round(monto*100)/100, medio:'Varios'}], notas:'Total del mes según Estado de Resultado (RESUMEN VENTAS)', creado:fecha, origen:'fechaespecial'}); marcar(fecha); });
+  return true;
+}
 function leerLibro(wb){
   const out = {pedidos:[], clientes:[], listaMay:[], movprov:[], proveedores:[], gastos:[], empleados:[], horas:[], omitidas:0, desde:'', hasta:''};
   const vistos = {}; const provs = {};
@@ -1176,6 +1191,7 @@ function leerLibro(wb){
     const filas = XLSX.utils.sheet_to_json(wb.Sheets[nombre], {header:1, raw:true, defval:''});
     if(/^listado de pedidos$/i.test(nombre.trim())){ leerPedidos(filas, out, marcar); return; }
     if(leerBistrosoft(filas, out, marcar)) return;
+    if(leerEstadoResultado(filas, nombre, out, marcar)) return;
     if(leerSemana(filas, nombre, out, marcar)) return;
     if(/^lista de precios$/i.test(nombre.trim())){ leerListaMay(filas, out); return; }
     let h=-1, cols=null;
