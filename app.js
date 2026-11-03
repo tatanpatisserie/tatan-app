@@ -1023,14 +1023,14 @@ SHEETS.importar = function(){
     body += '<div class="card stack" style="gap:6px"><b>'+esc(d.archivo||'')+'</b>'+
       (r.movprov.length?'<div class="row between"><span>Comprobantes de proveedores</span><b class="num">'+r.movprov.length.toLocaleString('es-AR')+'</b></div>':'')+
       (r.proveedores.length?'<div class="row between"><span>Proveedores con datos (CUIT, CBU…)</span><b class="num">'+r.proveedores.length+'</b></div>':'')+
-      (r.pedidos.length?'<div class="row between"><span>Pedidos'+(r.pedidos.some(p=>p.origen==='cocina')?' de la semana (cocina)':r.pedidos.some(p=>p.canal==='Mayorista')?' mayoristas':' minoristas')+'</span><b class="num">'+r.pedidos.length.toLocaleString('es-AR')+'</b></div><div class="row between"><span class="muted">Clientes</span><b class="num">'+r.clientes.length.toLocaleString('es-AR')+'</b></div>':'')+
+      (r.pedidos.length?'<div class="row between"><span>Pedidos'+(r.pedidos.some(p=>p.origen==='bistrosoft')?' (días de venta del local)':r.pedidos.some(p=>p.origen==='cocina')?' de la semana (cocina)':r.pedidos.some(p=>p.canal==='Mayorista')?' mayoristas':' minoristas')+'</span><b class="num">'+r.pedidos.length.toLocaleString('es-AR')+'</b></div><div class="row between"><span class="muted">Clientes</span><b class="num">'+r.clientes.length.toLocaleString('es-AR')+'</b></div>':'')+
       (r.listaMay.length?'<div class="row between"><span>Lista de precios mayorista</span><b class="num">'+r.listaMay.length+'</b></div>':'')+
       (r.empleados.length?'<div class="row between"><span>Empleados (nómina)</span><b class="num">'+r.empleados.length+'</b></div>':'')+
       (r.horas.length?'<div class="row between"><span>Turnos y horas trabajadas</span><b class="num">'+r.horas.length.toLocaleString('es-AR')+'</b></div>':'')+
       (r.gastos.length?'<div class="row between"><span>Gastos</span><b class="num">'+r.gastos.length.toLocaleString('es-AR')+'</b></div>':'')+
       (r.desde?'<div class="row between"><span class="muted">Desde – hasta</span><span>'+fdate(r.desde)+' – '+fdate(r.hasta)+'</span></div>':'')+
       (r.omitidas?'<div class="muted" style="font-size:12.5px">'+r.omitidas+' filas sin fecha o sin importe quedaron afuera.</div>':'')+
-      (!r.pedidos.length&&!r.listaMay.length&&!r.movprov.length&&!r.proveedores.length&&!r.gastos.length&&!r.empleados.length&&!r.horas.length?'<p class="err" style="margin:0">No encontré hojas que pueda leer en este archivo (LISTADO DE PEDIDOS, DETALLE, Datos Proveedores, CBU Proveedores o NOMINA EMPLEADOS).</p>':'')+'</div>';
+      (!r.pedidos.length&&!r.listaMay.length&&!r.movprov.length&&!r.proveedores.length&&!r.gastos.length&&!r.empleados.length&&!r.horas.length?'<p class="err" style="margin:0">No encontré hojas que pueda leer en este archivo (LISTADO DE PEDIDOS, DETALLE, Datos Proveedores, CBU Proveedores, NOMINA EMPLEADOS o BD - VTAS de Bistrosoft).</p>':'')+'</div>';
   }
   if(d.prog) body += '<p class="num">Guardando… '+esc(d.prog)+'</p>';
   if(d.listo) body += '<div class="note">Listo. '+esc(d.listo)+'</div>';
@@ -1147,6 +1147,23 @@ function leerListaMay(filas, out){
   if(h<0) return;
   filas.slice(h+1).forEach(f => { const n=String(f[iP]||'').trim(); const pr=aPlata(f[iM]); if(n && pr) out.listaMay.push({nombre:n, precioMay:pr, grupo:String(f[0]||'').trim()}); });
 }
+function leerBistrosoft(filas, out, marcar){
+  // Exportación de caja de Bistrosoft: Monto | Movimiento | Fecha | Hora | Descripción | Medio de Pago | ...
+  // Se suman las comandas de cada día (sin las anuladas ni "Otros", que son consumos internos) y queda una venta por día.
+  let h=-1, cols=null;
+  for(let i=0;i<Math.min(filas.length,5);i++){ const up=filas[i].map(c=>norm(c).toUpperCase().trim()); if(up.includes('MONTO') && up.includes('MOVIMIENTO') && up.includes('MEDIO DE PAGO')){ h=i; cols=up; break; } }
+  if(h<0) return false;
+  const iM=cols.indexOf('MONTO'), iMov=cols.indexOf('MOVIMIENTO'), iF=cols.indexOf('FECHA'), iP=cols.indexOf('MEDIO DE PAGO');
+  const dias = {};
+  filas.slice(h+1).forEach(f => { if(norm(f[iMov]).trim()!=='comanda') return; const medio=String(f[iP]||'').trim()||'Efectivo'; if(/^otros$/i.test(medio)) return;
+    const fecha=aFecha(f[iF]); const m=aPlata(f[iM]); if(!fecha || !m){ out.omitidas++; return; }
+    const d = dias[fecha] || (dias[fecha] = {total:0, n:0, medios:{}}); d.total+=m; d.n++; d.medios[medio]=(d.medios[medio]||0)+m; });
+  Object.keys(dias).sort().forEach(fecha => { const d=dias[fecha]; const r2=x=>Math.round(x*100)/100;
+    out.pedidos.push({id:'bs-'+fecha, clienteNombre:'Mostrador', canal:'Local', entrega:fecha, hora:'', estado:'entregado', items:[{pid:'', nombre:'Ventas del local (Bistrosoft)', cant:1, precio:r2(d.total)}], descuento:'', envio:'',
+      pagos:Object.entries(d.medios).map(([medio,monto])=>({f:fecha, monto:r2(monto), medio})), notas:d.n+' comandas del día en Bistrosoft', creado:fecha, origen:'bistrosoft'});
+    marcar(fecha); });
+  return true;
+}
 function leerLibro(wb){
   const out = {pedidos:[], clientes:[], listaMay:[], movprov:[], proveedores:[], gastos:[], empleados:[], horas:[], omitidas:0, desde:'', hasta:''};
   const vistos = {}; const provs = {};
@@ -1155,6 +1172,7 @@ function leerLibro(wb){
     if(/^ingres(o|ar)$/i.test(nombre.trim())) return;
     const filas = XLSX.utils.sheet_to_json(wb.Sheets[nombre], {header:1, raw:true, defval:''});
     if(/^listado de pedidos$/i.test(nombre.trim())){ leerPedidos(filas, out, marcar); return; }
+    if(leerBistrosoft(filas, out, marcar)) return;
     if(leerSemana(filas, nombre, out, marcar)) return;
     if(/^lista de precios$/i.test(nombre.trim())){ leerListaMay(filas, out); return; }
     let h=-1, cols=null;
