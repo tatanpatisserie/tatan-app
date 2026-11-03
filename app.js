@@ -282,7 +282,7 @@ function metricas(mes){
   let cobrado = 0;
   pedidosArr().forEach(p => (p.pagos||[]).forEach(x => { if((x.f||'').startsWith(mes)) cobrado += num(x.monto); }));
   const porCobrar = sum(pedidosArr().filter(p => p.estado!=='cancelado' && (p.entrega||'') <= fin), p => Math.max(0, totPedido(p).saldo));
-  const gastos = Object.values(S.gastos).filter(g => (g.fecha||'').startsWith(mes));
+  const gastos = Object.values(S.gastos).filter(g => (g.fecha||'').startsWith(mes) && !/^(equipamiento|inversi[oó]n)/i.test(g.cat||'')); // la inversión no es gasto del mes (igual que en el Estado de Resultado)
   const fijos = sum(gastos.filter(g=>g.tipo==='fijo'), g=>num(g.monto));
   const variables = sum(gastos.filter(g=>g.tipo!=='fijo'), g=>num(g.monto));
   const sueldos = sum(Object.values(S.horas).filter(h=>(h.fecha||'').startsWith(mes)), h=>num(h.importe));
