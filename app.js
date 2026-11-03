@@ -1198,8 +1198,10 @@ function leerLibro(wb){
       filas.slice(h+1).forEach(f => { const fecha=aFecha(f[iF]); const n=String(f[iE]||'').trim(); const horas=Math.round(aHoras(f[iCh])*100)/100; const importe=aPlata(iIm>=0?f[iIm]:'');
         if(!fecha || !n || (!horas && !importe)){ if(fecha||n) out.omitidas++; return; }
         const t = {fecha, empleado:n, rubro:titulo(iRu>=0?f[iRu]:''), ingreso:aHora(iHi>=0?f[iHi]:''), egreso:aHora(iHe>=0?f[iHe]:''), horas, tarifa:aPlata(iTa>=0?f[iTa]:''), importe, obs:String(iOb>=0?f[iOb]:'').trim(), origen:'planilla', creado:today()};
+        // Un número fuera de lugar (ej. el valor hora en "HS RECIBO") da importes absurdos: ahí se recalcula con horas × tarifa.
+        if(Math.abs(importe) > 10000000 && horas && t.tarifa){ t.importe = Math.round(horas*t.tarifa); out.corregidas = (out.corregidas||0)+1; }
         const base='hs-'+hashTxt([fecha,n,t.ingreso,t.egreso,horas,importe].join('|')); vistos[base]=(vistos[base]||0)+1; t.id=base+(vistos[base]>1?'-'+vistos[base]:'');
-        out.horas.push(t); marcar(fecha); });
+        t._hoja = nombre; out.horas.push(t); marcar(fecha); });
       return;
     }
     if(iCuit>=0 && iP>=0 && iF<0){ // datos de proveedores
@@ -1228,6 +1230,9 @@ function leerLibro(wb){
       }
     });
   });
+  // Las hojas auxiliares (ej. "jun jornada 30hs", "horas abril x vacaciones") repiten turnos del DETALLE: si hay DETALLE, mandan esas horas.
+  if(out.horas.some(t=>/^detalle$/i.test(String(t._hoja).trim()))) out.horas = out.horas.filter(t=>/^detalle$/i.test(String(t._hoja).trim()));
+  out.horas.forEach(t=>{ delete t._hoja; });
   out.proveedores = Object.values(provs);
   return out;
 }
@@ -1320,7 +1325,11 @@ const A = {
       const recientes = {}; r.horas.forEach(t=>{ const k=t.empleadoId; if(!recientes[k]||t.fecha>recientes[k].fecha) recientes[k]=t; });
       Object.values(nuevos).forEach(e=>{ const t=recientes[e.id]; e.tarifa=t?t.tarifa:''; e.activo = !!(t && t.fecha >= addDays(today(),-60)); });
       if(Object.keys(nuevos).length && !(await saveMany('empleados', Object.values(nuevos)))) return;
-      if(!(await saveMany('horas', r.horas, prog))) return; partes.push(r.horas.length.toLocaleString('es-AR')+' turnos'); }
+      if(!(await saveMany('horas', r.horas, prog))) return; partes.push(r.horas.length.toLocaleString('es-AR')+' turnos');
+      // La planilla manda: los turnos que vinieron de una importación anterior y ya no están en la planilla se borran (los cargados a mano no se tocan).
+      const nuevosIds = new Set(r.horas.map(t=>t.id)); const viejos = Object.values(S.horas).filter(h=>h.origen==='planilla' && !nuevosIds.has(h.id)).map(h=>h.id);
+      for(let i=0;i<viejos.length;i+=200){ const { error } = await sb.from('horas').delete().in('id', viejos.slice(i,i+200)); if(error){ onWriteError(error); return; } }
+      if(viejos.length){ const n=Object.assign({},S.horas); viejos.forEach(id=>delete n[id]); S.horas=n; partes.push(viejos.length.toLocaleString('es-AR')+' turnos repetidos o viejos borrados'); } }
     if(r.gastos.length){ if(!(await saveMany('gastos', r.gastos, prog))) return; partes.push(r.gastos.length.toLocaleString('es-AR')+' gastos'); }
     SH.draft.prog=''; SH.draft.listo = 'Se guardaron '+partes.join(', ')+'.'; renderSheet(); },
   exportar: async () => {
