@@ -394,7 +394,7 @@ R.semana = function(){
   return `<div class="stack">
     <div class="monthbar"><button class="btn" data-act="semNav" data-n="-7" aria-label="Semana anterior">‹</button><div style="text-align:center"><div class="eyebrow">Pedidos de la semana</div><h1>${fdateShort(ini).replace(/^\S+ /,'')} al ${fdateShort(addDays(ini,5)).replace(/^\S+ /,'')}</h1></div><button class="btn" data-act="semNav" data-n="7" aria-label="Semana siguiente">›</button></div>
     <div class="row between" style="flex-wrap:wrap;gap:8px"><div class="chips">${chip('','Todos')}${chip('may','Mayoristas')}${chip('min','Minoristas')}${ini!==lunesDe(today())?'<button class="chip" data-act="semHoy">Esta semana</button>':''}</div>
-      <div class="row" style="gap:8px"><span class="pill ${totItems&&listos===totItems?'p-ok':'p-pis'}">${listos}/${totItems} listos</span>${SECTOR!=='cocina'?'<button class="btn pri sm" data-act="nuevoPedido">'+svg('plus')+'Pedido</button>':''}</div></div>
+      <div class="row" style="gap:8px"><span class="pill ${totItems&&listos===totItems?'p-ok':'p-pis'}">${listos}/${totItems} listos</span>${SECTOR!=='cocina'?'<button class="btn sm" data-act="nuevoPedido">'+svg('plus')+'Minorista</button><button class="btn pri sm" data-act="nuevoMay">'+svg('plus')+'Mayorista</button>':''}</div></div>
     <div class="search">${svg('search')}<input class="f" id="qsem" placeholder="Buscar cliente o producto" value="${esc(U.qSem||'')}" data-bind="qSem"></div>
     <div class="week">${dias.map(d=>'<section class="wday'+(d.f===today()?' hoy':'')+'"><h3><span>'+DIAS_LARGOS[d.i]+' '+(+d.f.slice(8))+'/'+(+d.f.slice(5,7))+'</span><span class="muted num" style="font-size:12px">'+(d.ps.length?d.ps.length+' ped.':'')+'</span></h3>'+(d.ps.length?d.ps.map(card).join(''):'<div class="wempty">Sin pedidos</div>')+'</section>').join('')}</div>
     ${totList.length?'<details class="card"><summary><b>Total de la semana por producto</b> <span class="muted">('+totList.length+')</span></summary><div class="totsem" style="margin-top:8px">'+totList.map(t=>'<div><span>'+esc(t.n)+'</span><span class="num">'+(t.l?'<span class="muted">'+fmtNum(t.l)+'/</span>':'')+fmtNum(t.c)+'</span></div>').join('')+'</div></details>':''}
@@ -487,14 +487,16 @@ function pedidoItem(p){
     '<div class="end"><span class="num" style="font-weight:700">'+$(t.aCobrar)+'</span>'+saldoPill(p)+'</div></button>';
 }
 /* ===== PEDIDOS ===== */
+function vistaPedBtns(){ const v=U.pedVista||'semana'; return '<div class="subtabs" style="min-width:180px"><button data-act="pedVista" data-v="semana" aria-pressed="'+(v==='semana')+'">Semana</button><button data-act="pedVista" data-v="lista" aria-pressed="'+(v==='lista')+'">Lista</button></div>'; }
 R.pedidos = function(){
   const f = U.fPed, q = norm(U.q);
   let arr = pedidosArr();
   if(f==='activos') arr = arr.filter(p=>['pendiente','produccion','listo'].includes(p.estado||'pendiente'));
   if(f==='entregados') arr = arr.filter(p=>p.estado==='entregado');
   if(f==='deben') arr = arr.filter(p=>p.estado!=='cancelado' && totPedido(p).saldo>0.5);
-  const may = U.pedTipo==='may';
-  arr = arr.filter(p => may ? p.canal==='Mayorista' : p.canal!=='Mayorista');
+  if((U.pedVista||'semana')==='semana') return '<div class="stack"><div class="row between"><h1>Pedidos</h1>'+vistaPedBtns()+'</div>'+R.semana()+'</div>';
+  const may = U.pedTipo==='may', fe = U.pedTipo==='fe';
+  arr = arr.filter(p => may ? p.canal==='Mayorista' : fe ? p.canal==='Fecha especial' : (p.canal!=='Mayorista' && p.canal!=='Fecha especial'));
   if(!may && U.fCanal) arr = arr.filter(p=>(p.canal||'Pedido particular')===U.fCanal);
   if(q) arr = arr.filter(p=> norm(p.clienteNombre+' '+(p.remito||'')+' '+(p.items||[]).map(l=>l.nombre).join(' ')+' '+(p.notas||'')).includes(q));
   arr.sort(byEntrega); if(f==='entregados'||f==='todos') arr.reverse();
@@ -504,11 +506,12 @@ R.pedidos = function(){
   const gname = k => !k?'Sin fecha': k===today()?'Hoy · '+fdateShort(k): k===addDays(today(),1)?'Mañana · '+fdateShort(k): k<today()? fdateShort(k)+' · pasado' : fdateShort(k);
   const chip = (k,l) => '<button class="chip" data-act="fPed" data-v="'+k+'" aria-pressed="'+(f===k)+'">'+l+'</button>';
   return `<div class="stack">
-    <div class="row between"><h1>Pedidos</h1><div class="row"><a class="btn sm" href="#semana">${svg('bag')}Semana</a>${may?'':'<button class="btn sm" data-act="ventaLocal">'+svg('cash')+'Venta local</button>'}<button class="btn pri sm" data-act="${may?'nuevoMay':'nuevoPedido'}">${svg('plus')}${may?'Nuevo mayorista':'Nuevo'}</button></div></div>
-    <div class="subtabs"><button data-act="pedTipo" data-v="min" aria-pressed="${!may}">Minoristas</button><button data-act="pedTipo" data-v="may" aria-pressed="${may}">Mayoristas</button></div>
+    <div class="row between"><h1>Pedidos</h1><div class="row">${vistaPedBtns()}<button class="btn pri sm" data-act="${may?'nuevoMay':fe?'nuevoFE':'nuevoPedido'}">${svg('plus')}${may?'Nuevo mayorista':fe?'Nueva fecha especial':'Nuevo minorista'}</button></div></div>
+    <div class="subtabs"><button data-act="pedTipo" data-v="min" aria-pressed="${!may&&!fe}">Minoristas</button><button data-act="pedTipo" data-v="may" aria-pressed="${may}">Mayoristas</button><button data-act="pedTipo" data-v="fe" aria-pressed="${fe}">Fecha especial</button></div>
+    ${fe?'<div class="note">Esta solapa la vamos a armar a medida más adelante. Por ahora muestra las ventas de fecha especial cargadas.</div>':''}
     <div class="search">${svg('search')}<input class="f" id="qped" placeholder="${may?'Buscar por cliente, remito o producto':'Buscar por cliente o producto'}" value="${esc(U.q)}" data-bind="q"></div>
     <div class="chips">${chip('activos','Activos')}${chip('deben','Deben plata')}${chip('entregados','Entregados')}${chip('todos','Todos')}
-      ${may?'':'<select class="chip" id="fcanal" data-bind="fCanal" aria-label="Canal"><option value="">Todos los canales</option>'+CANALES_MIN.map(c=>'<option'+(U.fCanal===c?' selected':'')+'>'+c+'</option>').join('')+'</select>'}</div>
+      ${may||fe?'':'<select class="chip" id="fcanal" data-bind="fCanal" aria-label="Canal"><option value="">Todos los canales</option>'+CANALES_MIN.filter(c=>c!=='Fecha especial').map(c=>'<option'+(U.fCanal===c?' selected':'')+'>'+c+'</option>').join('')+'</select>'}</div>
     ${groups.length ? groups.map(g=>'<div class="group-h">'+esc(gname(g.k))+'</div><div class="list">'+g.items.map(pedidoItem).join('')+'</div>').join('') + (totalArr>lim?'<button class="btn" data-act="masPed">Ver más ('+(totalArr-lim).toLocaleString('es-AR')+')</button>':'') :
       (may ? '<div class="card empty"><h2>No hay pedidos mayoristas acá</h2><p>Cargá el pedido con el cliente, el remito y los productos con el precio de la lista mayorista.</p><button class="btn pri" data-act="nuevoMay">Nuevo pedido mayorista</button></div>'
            : '<div class="card empty"><h2>No hay pedidos acá</h2><p>Cargá un pedido con fecha de entrega, seña y saldo. Lo ves en Inicio y en la lista del día.</p><button class="btn pri" data-act="nuevoPedido">Nuevo pedido</button></div>')}
@@ -761,7 +764,8 @@ function renderSheet(){
   const scrollEl = host.querySelector('.sheet-b'); const st = scrollEl? scrollEl.scrollTop : 0;
   const ae = document.activeElement; const keep = ae && ae.id && host.contains(ae) ? {id:ae.id, s:ae.selectionStart, e:ae.selectionEnd} : null;
   const r = SHEETS[SH.type]();
-  host.innerHTML = '<div class="sheet-bg" data-act="bgclose"><div class="sheet" role="dialog" aria-modal="true" aria-label="'+esc(r.title)+'"><div class="sheet-h"><h2>'+esc(r.title)+'</h2><button class="x" data-act="close" aria-label="Cerrar">×</button></div><div class="sheet-b">'+r.body+'</div>'+(r.foot?'<div class="sheet-f">'+r.foot+'</div>':'')+'</div></div>';
+  host.innerHTML = '<div class="sheet-bg" data-act="bgclose"><div class="sheet'+(SH._visto?' still':'')+'" role="dialog" aria-modal="true" aria-label="'+esc(r.title)+'"><div class="sheet-h"><h2>'+esc(r.title)+'</h2><button class="x" data-act="close" aria-label="Cerrar">×</button></div><div class="sheet-b">'+r.body+'</div>'+(r.foot?'<div class="sheet-f">'+r.foot+'</div>':'')+'</div></div>';
+  SH._visto = true;
   const nb = host.querySelector('.sheet-b'); if(nb) nb.scrollTop = st;
   if(keep){ const el=document.getElementById(keep.id); if(el){ el.focus(); try{ el.setSelectionRange(keep.s,keep.e); }catch(e){} } }
 }
@@ -769,15 +773,44 @@ const fld = (path,label,val,type,attrs) => '<label class="lb">'+label+'<input cl
 const sel = (path,label,val,opts) => '<label class="lb">'+label+'<select class="f" id="d-'+path.replace(/\./g,'-')+'" data-d="'+path+'">'+opts.map(o=>{ const [v,l]=Array.isArray(o)?o:[o,o]; return '<option value="'+esc(v)+'"'+(String(val)===String(v)?' selected':'')+'>'+esc(l)+'</option>'; }).join('')+'</select></label>';
 const delBlock = (what) => SH.confirmDel ? '<div class="confirm">¿Borrar '+what+'? No se puede deshacer.<span style="flex:1"></span><button class="btn sm" data-act="delNo">No</button><button class="btn sm pri" data-act="delSi" style="background:var(--bad);border-color:var(--bad)">Sí, borrar</button></div>' : '';
 
+/* Buscador de productos de pedidos: por palabras sueltas, sin importar el orden ni los acentos. */
+const CAT_ALIAS = {'Tatanes':'torta tatan','Tortas':'torta','Tortas especiales':'torta','Marquise':'torta','Tartas dulces':'tarta','Tartas saladas':'tarta','Porciones y muffins':'porcion','Budines enteros':'budin','Facturas, alfajores y boxes':'factura alfajor box'};
+function buscarProductos(q, modo){
+  const toks = norm(q).replace(/[^a-z0-9ñ ]/g,' ').split(/\s+/).filter(Boolean); if(!toks.length) return [];
+  const base = modo==='may' ? catalogo().filter(p=>num(p.precioMay)>0) : catalogo().filter(p=>p.cat!=='Mayorista' && !/\(mc\)\s*$/i.test(p.nombre||''));
+  const out = [];
+  base.forEach(p => { const nom = norm(p.nombre).replace(/[^a-z0-9ñ ]/g,' '); const extra = norm((p.cat||'')+' '+(CAT_ALIAS[p.cat]||''));
+    const pal = (nom+' '+extra).split(/\s+/).filter(Boolean);
+    let hit=0, enNom=0; toks.forEach(t => { const ok = pal.some(w=>w.startsWith(t)) || (t.length>=4 && nom.includes(t)); if(ok){ hit++; if(nom.split(/\s+/).some(w=>w.startsWith(t))) enNom++; } });
+    const frase = norm(q).replace(/[^a-z0-9ñ ]/g,' ').replace(/\s+/g,' ').trim();
+    const pos = nom.replace(/\s+/g,' ').trim().indexOf(frase);
+    if(hit) out.push({p, hit, enNom, pos: pos<0?999:pos, len:nom.length}); });
+  const todos = out.filter(x=>x.hit===toks.length);
+  const lista = (todos.length ? todos : out.filter(x=>x.hit>=Math.max(1,toks.length-1)));
+  return lista.sort((a,b)=> b.hit-a.hit || b.enNom-a.enNom || a.pos-b.pos || a.len-b.len || (a.p.nombre||'').localeCompare(b.p.nombre||'')).slice(0,12).map(x=>x.p);
+}
+function prodResultsHTML(){
+  const q = SH.q||''; if(norm(q).trim().length<2) return '';
+  const may = SH.type==='pedMay'; const res = buscarProductos(q, may?'may':'min');
+  const sel = Math.min(SH.sel||0, Math.max(0,res.length-1));
+  return (res.length ? '<div class="results" role="listbox">'+res.map((p,i)=>'<button data-act="addItem" data-pid="'+p.id+'" role="option" class="'+(i===sel?'on':'')+'" aria-selected="'+(i===sel)+'"><span>'+esc(p.nombre)+'</span><span class="num muted">'+(may?$(p.precioMay):(p.precio?$(p.precio):'a cotizar'))+'</span></button>').join('')+'</div>' : '<div class="muted" style="font-size:13px">No encontré ese producto en la lista'+(may?' mayorista':'')+'.</div>')+
+    '<button class="btn sm ghost" data-act="addFree">+ Agregar “'+esc(q)+'” como ítem libre</button>';
+}
+function pintarResultados(){ const c=document.getElementById('itq-res'); if(c) c.innerHTML = prodResultsHTML(); }
+function machete(d){
+  if(SH.pegar) return '<div class="card stack" style="gap:8px"><b>Pegá el pedido como te llegó</b><textarea class="f" id="pegtxt" rows="7" placeholder="Pegá acá el mensaje del cliente">'+esc(d.mensaje||'')+'</textarea><div class="row" style="justify-content:flex-end;gap:8px"><button class="btn sm ghost" data-act="pegarTexto">Cancelar</button><button class="btn sm pri" data-act="aplicarTexto">Dejar a la vista</button></div><span class="muted" style="font-size:12.5px">Queda arriba como ayuda para cargar cada producto con el nombre correcto de la lista. No se carga solo.</span></div>';
+  if(d.mensaje) return '<div class="machete"><div class="row between"><b>Mensaje del cliente</b><div class="row" style="gap:6px"><button class="btn sm ghost" data-act="pegarTexto">Editar</button><button class="btn sm ghost" data-act="quitarMachete">Quitar</button></div></div><div class="mtxt">'+esc(d.mensaje)+'</div></div>';
+  return '<button class="btn sm" data-act="pegarTexto">Pegar pedido de WhatsApp</button>';
+}
+function buscadorProductos(placeholder){
+  return '<div class="search">'+svg('search')+'<input class="f" id="itq" data-sq="1" placeholder="'+placeholder+'" value="'+esc(SH.q||'')+'" autocomplete="off" autocorrect="off" spellcheck="false"></div><div id="itq-res" class="stack" style="gap:8px">'+prodResultsHTML()+'</div>';
+}
 function itemsEditor(items){
-  const q = norm(SH.q);
-  const res = q.length>=2 ? catalogo().filter(p=>norm(p.nombre).includes(q)).slice(0,8) : [];
-  return '<div class="stack" style="gap:8px"><h3>Productos</h3><div class="lines">'+
-    (items.length? items.map((l,i)=>'<div class="line"><div class="nm">'+esc(l.nombre)+(l.pid?'':'<small>ítem libre</small>')+'</div><input class="f num" id="it-c-'+i+'" data-it="'+i+'" data-k="cant" type="number" inputmode="decimal" step="any" value="'+esc(l.cant)+'" aria-label="Cantidad"><input class="f num" id="it-p-'+i+'" data-it="'+i+'" data-k="precio" type="number" inputmode="decimal" step="any" value="'+esc(l.precio)+'" aria-label="Precio unitario"><button class="rm" data-act="rmItem" data-i="'+i+'" aria-label="Quitar">×</button></div>').join('') : '<div class="muted" style="font-size:13px">Buscá en tu lista de precios para agregar productos.</div>')+
-    '</div><div class="row muted" style="font-size:11.5px;justify-content:flex-end;gap:4px;padding-right:44px"><span style="width:64px;text-align:center">cant.</span><span style="width:96px;text-align:center">precio unit.</span></div>'+
-    '<div class="search">'+svg('search')+'<input class="f" id="itq" data-sq="1" placeholder="Agregar producto: escribí 2 letras" value="'+esc(SH.q)+'" autocomplete="off"></div>'+
-    (res.length? '<div class="results">'+res.map(p=>'<button data-act="addItem" data-pid="'+p.id+'"><span>'+esc(p.nombre)+'</span><span class="num muted">'+(p.precio?$(p.precio):'a cotizar')+'</span></button>').join('')+'</div>' : '')+
-    (q.length>=2 ? '<button class="btn sm ghost" data-act="addFree">+ Agregar “'+esc(SH.q)+'” como ítem libre</button>' : '')+'</div>';
+  return '<div class="stack" style="gap:8px"><h3>Productos</h3>'+
+    buscadorProductos('Agregar producto: escribí, usá ↑ ↓ y Enter')+
+    '<div class="lines">'+
+    (items.length? items.map((l,i)=>'<div class="line"><div class="nm">'+esc(l.nombre)+(l.pid?'':'<small>ítem libre</small>')+'</div><input class="f num" id="it-c-'+i+'" data-it="'+i+'" data-k="cant" type="number" inputmode="decimal" step="any" value="'+esc(l.cant)+'" aria-label="Cantidad"><input class="f num" id="it-p-'+i+'" data-it="'+i+'" data-k="precio" type="number" inputmode="decimal" step="any" value="'+esc(l.precio)+'" aria-label="Precio unitario"><button class="rm" data-act="rmItem" data-i="'+i+'" aria-label="Quitar">×</button></div>').join('') : '<div class="muted" style="font-size:13px">Todavía no agregaste productos.</div>')+
+    '</div>'+(items.length?'<div class="row muted" style="font-size:11.5px;justify-content:flex-end;gap:4px;padding-right:44px"><span style="width:64px;text-align:center">cant.</span><span style="width:96px;text-align:center">precio unit.</span></div>':'')+'</div>';
 }
 function clienteFields(d){
   const opts = Object.values(S.clientes).map(c=>'<option value="'+esc(c.nombre)+'">').join('');
@@ -805,7 +838,7 @@ SHEETS.pedido = function(){
   const body = clienteFields(d)+
     '<div class="grid3">'+sel('canal','Canal',d.canal,CANALES_MIN.includes(d.canal)?CANALES_MIN:CANALES)+fld('entrega','Fecha de entrega',d.entrega,'date')+fld('hora','Hora',d.hora,'time')+'</div>'+
     sel('estado','Estado',d.estado,Object.entries(ESTADOS).map(([k,v])=>[k,v[0]]))+
-    (SH.pegar ? '<div class="card stack" style="gap:8px"><b>Pegá el pedido como te llegó</b><textarea class="f" id="pegtxt" rows="8" placeholder="GOLF\n8 alf maicena\n8 alf negro\npan integral x7"></textarea><div class="row" style="justify-content:flex-end;gap:8px"><button class="btn sm ghost" data-act="pegarTexto">Cancelar</button><button class="btn sm pri" data-act="aplicarTexto">Armar productos</button></div><span class="muted" style="font-size:12.5px">La primera línea sin cantidad se toma como cliente. Las líneas sin cantidad van a notas.</span></div>' : '<button class="btn sm" data-act="pegarTexto">Pegar pedido de WhatsApp</button>')+
+    machete(d)+
     itemsEditor(d.items||[])+
     '<div class="grid2">'+fld('descuento','Descuento ($)',d.descuento||'','number')+fld('envio','Envío ($, va aparte)',d.envio||'','number')+'</div>'+
     '<div class="stack" style="gap:8px"><div class="row between"><h3>Pagos y señas</h3><div class="row"><button class="btn sm" data-act="addPago" data-tipo="sena">Seña 50%</button><button class="btn sm" data-act="addPago" data-tipo="saldo">Saldo completo</button><button class="btn sm ghost" data-act="addPago" data-tipo="otro">+ Pago</button></div></div><div class="pays">'+(pays||'<div class="muted" style="font-size:13px">Sin pagos registrados.</div>')+'</div></div>'+
@@ -826,19 +859,17 @@ function proxRemito(){ const n = Math.max(0, ...pedidosArr().map(p=>parseInt(Str
 function listaMayorista(){ return catalogo().filter(p=>num(p.precioMay)>0); }
 SHEETS.pedMay = function(){
   const d = SH.draft; const t = totPedido(d);
-  const q = norm(SH.q); const lista = listaMayorista();
-  const res = q.length>=2 ? lista.filter(p=>norm(p.nombre).includes(q)).slice(0,10) : [];
+  const lista = listaMayorista();
   const cli = '<datalist id="dl-climay">'+clientesMay().map(c=>'<option value="'+esc(c.nombre)+'">').join('')+'</datalist>';
   const lineas = (d.items||[]).map((l,i)=>'<div class="line may"><input class="f num" id="it-c-'+i+'" data-it="'+i+'" data-k="cant" type="number" inputmode="decimal" step="any" value="'+esc(l.cant)+'" aria-label="Cantidad"><div class="nm">'+esc(l.nombre)+(l.pid?'':'<small>ítem libre</small>')+'</div><input class="f num" id="it-p-'+i+'" data-it="'+i+'" data-k="precio" type="number" inputmode="decimal" step="any" value="'+esc(l.precio)+'" aria-label="Valor unitario"><span class="num imp">'+$(num(l.cant)*num(l.precio))+'</span><button class="rm" data-act="rmItem" data-i="'+i+'" aria-label="Quitar">×</button></div>').join('');
   const body = cli+
     '<div class="grid2">'+fld('clienteNombre','Cliente',d.clienteNombre,'text','list="dl-climay" autocomplete="off" placeholder="Elegí o escribí el cliente"')+fld('remito','N° de remito',d.remito||'','text','inputmode="numeric"')+'</div>'+
     '<div class="grid3">'+fld('entrega','Fecha de entrega',d.entrega,'date')+fld('factura','N° de factura (opcional)',d.factura||'','text','inputmode="numeric"')+sel('estado','Estado',d.estado,Object.entries(ESTADOS).map(([k,v])=>[k,v[0]]))+'</div>'+
     '<div class="stack" style="gap:6px"><span class="lb" style="margin:0">IVA</span><div class="subtabs"><button data-act="pedIva" data-v="0" aria-pressed="'+(!d.iva)+'">Sin IVA</button><button data-act="pedIva" data-v="1" aria-pressed="'+(!!d.iva)+'">Con IVA (+'+IVA_PCT+'%)</button></div></div>'+
+    machete(d)+
     '<div class="stack" style="gap:8px"><h3>Productos</h3>'+
-      (lineas ? '<div class="row muted may-h"><span>Cant.</span><span>Producto</span><span>Valor unit.</span><span>Importe</span><span></span></div><div class="lines">'+lineas+'</div>' : '<div class="muted" style="font-size:13px">Buscá en la lista mayorista para agregar productos.</div>')+
-      '<div class="search">'+svg('search')+'<input class="f" id="itq" data-sq="1" placeholder="Agregar producto de la lista mayorista: escribí 2 letras" value="'+esc(SH.q)+'" autocomplete="off"></div>'+
-      (res.length ? '<div class="results">'+res.map(p=>'<button data-act="addItem" data-pid="'+p.id+'"><span>'+esc(p.nombre)+'</span><span class="num muted">'+$(p.precioMay)+'</span></button>').join('')+'</div>' : '')+
-      (q.length>=2 ? '<button class="btn sm ghost" data-act="addFree">+ Agregar “'+esc(SH.q)+'” como ítem libre</button>' : '')+
+      buscadorProductos('Agregar de la lista mayorista: escribí, usá ↑ ↓ y Enter')+
+      (lineas ? '<div class="row muted may-h"><span>Cant.</span><span>Producto</span><span>Valor unit.</span><span>Importe</span><span></span></div><div class="lines">'+lineas+'</div>' : '<div class="muted" style="font-size:13px">Todavía no agregaste productos.</div>')+
       (!lista.length ? '<div class="note">Todavía no hay lista de precios mayorista. Se carga importando PEDIDOS MAYORISTAS (hoja "Lista de precios").</div>' : '')+
     '</div>'+
     fld('envio','Envío ($, lo ponés a mano según el cliente)',d.envio||'','number')+
@@ -1311,10 +1342,8 @@ const A = {
     else save('pedidos', Object.assign({},p,{items:its, estado:'listo'}));
     toast('Pedido de '+(p.clienteNombre||'')+' listo'); },
   pegarTexto: () => { SH.pegar = !SH.pegar; renderSheet(); setTimeout(()=>{ const t=document.getElementById('pegtxt'); if(t) t.focus(); },50); },
-  aplicarTexto: () => { const t=document.getElementById('pegtxt'); const res = parsearPedido(t?t.value:'', SH.draft.canal==='Mayorista'); const d=SH.draft;
-    if(res.cliente && !d.clienteNombre) d.clienteNombre = res.cliente; if(res.hora && !d.hora) d.hora = res.hora;
-    d.items = (d.items||[]).concat(res.items); if(res.notas.length) d.notas = [d.notas, res.notas.join('\n')].filter(Boolean).join('\n');
-    SH.pegar=false; renderSheet(); toast(res.items.length+' productos agregados'+(res.items.some(i=>!i.pid)?'. Revisá los precios de los que no están en la lista.':'')); },
+  aplicarTexto: () => { const t=document.getElementById('pegtxt'); SH.draft.mensaje = (t?t.value:'').trim(); SH.pegar=false; renderSheet(); setTimeout(()=>{ const q=document.getElementById('itq'); if(q) q.focus(); },50); },
+  quitarMachete: () => { SH.draft.mensaje=''; renderSheet(); },
   masPed: () => { U.pedLim = (U.pedLim||120)+200; render(); },
   fEmp: el => { U.fEmp = el.dataset.v; render(); },
   verEmp: el => { const id=el.dataset.id; const e=S.empleados[id]; const x=cuentasEmp(U.mes).find(c=>c.id===id); openSheet('emp', e? clone(e) : {id, nombre: x?x.nombre:''}); },
@@ -1468,13 +1497,15 @@ const A = {
   nuevoPedido: () => openSheet('pedido', nuevoPedido()),
   nuevoMay: () => openSheet('pedMay', nuevoPedido({canal:'Mayorista', remito: proxRemito(), iva:false, entrega: today()})),
   pedTipo: el => { U.pedTipo = el.dataset.v; U.pedLim = 120; render(); },
+  pedVista: el => { U.pedVista = el.dataset.v; render(); },
+  nuevoFE: () => openSheet('pedido', nuevoPedido({canal:'Fecha especial'})),
   pedIva: el => { SH.draft.iva = el.dataset.v==='1'; renderSheet(); },
   ventaLocal: () => openSheet('pedido', nuevoPedido({canal:'Local', estado:'entregado', clienteNombre:'Mostrador'}), {venta:true}),
   editPedido: el => { const p=S.pedidos[el.dataset.id]; if(p) openSheet(p.canal==='Mayorista'?'pedMay':'pedido', clone(p)); },
   abrirPedido: el => { const p=S.pedidos[el.dataset.id]; if(p) openSheet(p.canal==='Mayorista'?'pedMay':'pedido', clone(p)); },
   dupPedido: () => { const d=clone(SH.draft); delete d.id; d.pagos=[]; d.estado='pendiente'; d.entrega=today(); delete d.origen; if(d.canal==='Mayorista'){ d.remito=proxRemito(); d.factura=''; } openSheet(d.canal==='Mayorista'?'pedMay':'pedido', d); toast('Copia lista para editar'); },
-  addItem: el => { const p=prodById(el.dataset.pid); if(!p) return; const it=SH.draft.items; const ex=it.find(l=>l.pid===p.id); if(ex) ex.cant=num(ex.cant)+1; else it.push({pid:p.id, nombre:p.nombre, cant:1, precio:(SH.draft.canal==='Mayorista' && p.precioMay) ? p.precioMay : (p.precio||0)}); SH.q=''; renderSheet(); const q=document.getElementById('itq'); if(q) q.focus(); },
-  addFree: () => { SH.draft.items.push({pid:'', nombre:SH.q.trim(), cant:1, precio:0}); SH.q=''; renderSheet(); },
+  addItem: el => { const p=prodById(el.dataset.pid); if(!p) return; const it=SH.draft.items; const ex=it.find(l=>l.pid===p.id); if(ex) ex.cant=num(ex.cant)+1; else it.push({pid:p.id, nombre:p.nombre, cant:1, precio:(SH.draft.canal==='Mayorista' && p.precioMay) ? p.precioMay : (p.precio||0)}); SH.q=''; SH.sel=0; renderSheet(); const q=document.getElementById('itq'); if(q) q.focus(); },
+  addFree: () => { SH.draft.items.push({pid:'', nombre:SH.q.trim(), cant:1, precio:0}); SH.q=''; SH.sel=0; renderSheet(); const q=document.getElementById('itq'); if(q) q.focus(); },
   rmItem: el => { SH.draft.items.splice(+el.dataset.i,1); renderSheet(); },
   addPago: el => { const d=SH.draft; const t=totPedido(d); const tipo=el.dataset.tipo; d.pagos=d.pagos||[];
     const monto = tipo==='sena' ? Math.round(t.aCobrar/2/100)*100 : tipo==='saldo' ? Math.max(0,Math.round(t.saldo)) : '';
@@ -1561,12 +1592,14 @@ document.addEventListener('input', ev => {
   if(el.dataset.pg!=null){ d.pagos[+el.dataset.pg][el.dataset.k] = el.value; renderSheetSoft(); return; }
   if(el.dataset.oi!=null){ d.items[+el.dataset.oi].cant = el.value; return; }
   if(el.dataset.ing!=null){ d.ingredientes[+el.dataset.ing].cant = el.value; renderSheetSoft(); return; }
-  if(el.dataset.sq){ SH.q = el.value; renderSheet(); return; }
+  if(el.dataset.sq){ SH.q = el.value; SH.sel = 0; if(el.id==='itq' && document.getElementById('itq-res')){ pintarResultados(); return; } renderSheet(); return; }
   if(el.dataset.pq){ SH.pq = el.value; renderSheet(); return; }
 });
 document.addEventListener('change', ev => { const el=ev.target; if(el.dataset && el.dataset.chg && A[el.dataset.chg]){ A[el.dataset.chg](el); return; } if(el.tagName==='SELECT'){ if(el.dataset.bind){ U[el.dataset.bind]=el.value; render(); } else if(SH && el.dataset.d){ SH.draft[el.dataset.d]=el.value; renderSheet(); } } });
 let softT=null; function renderSheetSoft(){ clearTimeout(softT); softT=setTimeout(renderSheet, 450); }
-document.addEventListener('keydown', ev => { if(ev.key==='Escape' && SH) closeSheet(); if(ev.key==='Enter' && ev.target.dataset && ev.target.dataset.sq){ const b=document.querySelector('.results button'); if(b){ ev.preventDefault(); b.click(); } } });
+document.addEventListener('keydown', ev => { if(ev.key==='Escape' && SH) closeSheet();
+  if(SH && ev.target.id==='itq' && (ev.key==='ArrowDown'||ev.key==='ArrowUp')){ const n=document.querySelectorAll('#itq-res .results button').length; if(n){ ev.preventDefault(); SH.sel = ((SH.sel||0) + (ev.key==='ArrowDown'?1:-1) + n) % n; pintarResultados(); const on=document.querySelector('#itq-res .results button.on'); if(on) on.scrollIntoView({block:'nearest'}); } return; }
+  if(ev.key==='Enter' && ev.target.dataset && ev.target.dataset.sq){ const b=document.querySelector('.results button.on') || document.querySelector('.results button'); if(b){ ev.preventDefault(); b.click(); } } });
 
 route();
 boot();
