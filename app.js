@@ -507,7 +507,7 @@ R.pedidos = function(){
   if(f==='entregados') arr = arr.filter(p=>p.estado==='entregado');
   if(f==='deben') arr = arr.filter(p=>p.estado!=='cancelado' && totPedido(p).saldo>0.5);
   if((U.pedVista||'semana')==='semana') return '<div class="stack"><div class="row between"><h1>Pedidos</h1>'+vistaPedBtns()+'</div>'+R.semana()+'</div>';
-  const may = U.pedTipo==='may', fe = U.pedTipo==='fe';
+  const may = false, fe = true; // la lista es solo de fecha especial; minoristas y mayoristas se ven en la semana
   arr = arr.filter(p => may ? p.canal==='Mayorista' : fe ? p.canal==='Fecha especial' : (p.canal!=='Mayorista' && p.canal!=='Fecha especial'));
   if(!may && !fe) arr = arr.filter(p=>!esVentaDia(p));
   if(!may && U.fCanal) arr = arr.filter(p=>(p.canal||'Pedido particular')===U.fCanal);
@@ -519,14 +519,14 @@ R.pedidos = function(){
   const gname = k => !k?'Sin fecha': k===today()?'Hoy · '+fdateShort(k): k===addDays(today(),1)?'Mañana · '+fdateShort(k): k<today()? fdateShort(k)+' · pasado' : fdateShort(k);
   const chip = (k,l) => '<button class="chip" data-act="fPed" data-v="'+k+'" aria-pressed="'+(f===k)+'">'+l+'</button>';
   return `<div class="stack">
-    <div class="row between"><h1>Pedidos</h1><div class="row">${vistaPedBtns()}<button class="btn pri sm" data-act="${may?'nuevoMay':fe?'nuevoFE':'nuevoPedido'}">${svg('plus')}${may?'Nuevo mayorista':fe?'Nueva fecha especial':'Nuevo minorista'}</button></div></div>
-    <div class="subtabs"><button data-act="pedTipo" data-v="min" aria-pressed="${!may&&!fe}">Minoristas</button><button data-act="pedTipo" data-v="may" aria-pressed="${may}">Mayoristas</button><button data-act="pedTipo" data-v="fe" aria-pressed="${fe}">Fecha especial</button></div>
+    <div class="row between"><h1>Pedidos</h1><div class="row">${vistaPedBtns()}<button class="btn pri sm" data-act="${may?'nuevoMay':fe?'nuevoFE':'nuevoPedido'}">${svg('plus')}${may?'Nuevo mayorista':fe?'Nuevo pedido fecha especial':'Nuevo minorista'}</button></div></div>
     ${fe?'<div class="note">Esta solapa la vamos a armar a medida más adelante. Por ahora muestra las ventas de fecha especial cargadas.</div>':''}
     <div class="search">${svg('search')}<input class="f" id="qped" placeholder="${may?'Buscar por cliente, remito o producto':'Buscar por cliente o producto'}" value="${esc(U.q)}" data-bind="q"></div>
     <div class="chips">${chip('activos','Activos')}${chip('deben','Deben plata')}${chip('entregados','Entregados')}${chip('todos','Todos')}
       ${may||fe?'':'<select class="chip" id="fcanal" data-bind="fCanal" aria-label="Canal"><option value="">Todos los canales</option>'+CANALES_MIN.map(c=>'<option'+(U.fCanal===c?' selected':'')+'>'+c+'</option>').join('')+'</select>'}</div>
     ${groups.length ? groups.map(g=>'<div class="group-h">'+esc(gname(g.k))+'</div><div class="list">'+g.items.map(pedidoItem).join('')+'</div>').join('') + (totalArr>lim?'<button class="btn" data-act="masPed">Ver más ('+(totalArr-lim).toLocaleString('es-AR')+')</button>':'') :
       (may ? '<div class="card empty"><h2>No hay pedidos mayoristas acá</h2><p>Cargá el pedido con el cliente, el remito y los productos con el precio de la lista mayorista.</p><button class="btn pri" data-act="nuevoMay">Nuevo pedido mayorista</button></div>'
+           : fe ? '<div class="card empty"><h2>No hay pedidos de fecha especial acá</h2><p>Cuando carguemos los pedidos de fechas especiales los vas a ver en esta lista.</p></div>'
            : '<div class="card empty"><h2>No hay pedidos acá</h2><p>Cargá un pedido con fecha de entrega, seña y saldo. Lo ves en Inicio y en la lista del día.</p><button class="btn pri" data-act="nuevoPedido">Nuevo pedido</button></div>')}
   </div>`;
 };
@@ -926,7 +926,7 @@ SHEETS.pedido = function(){
     delBlock('este pedido');
   const wa = waLink(d.telefono, resumenPedido(d));
   const foot = (d.id?'<button class="btn danger sm" data-act="delAsk">Borrar</button><button class="btn sm" data-act="dupPedido">Duplicar</button>':'')+'<button class="btn sm" data-act="copyPedido">Copiar resumen</button>'+(wa?'<a class="btn sm" href="'+esc(wa)+'" target="_blank" rel="noopener">WhatsApp</a>':'')+'<span class="grow"></span><button class="btn pri" data-act="savePedido" '+(readOnly?'disabled':'')+'>Guardar</button>';
-  return { title: d.id ? 'Pedido de '+(d.clienteNombre||'—') : (d.canal==='Local'?'Venta local':'Nuevo pedido'), body, foot };
+  return { title: d.id ? 'Pedido de '+(d.clienteNombre||'—') : (d.canal==='Fecha especial'?'Nuevo pedido fecha especial':'Nuevo pedido'), body, foot };
 };
 /* ===== PEDIDO MAYORISTA ===== */
 function clientesMay(){
