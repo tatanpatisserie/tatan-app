@@ -584,7 +584,7 @@ R.mas = function(){
   if(SECTOR==='local') return `<div class="stack"><h1>Más</h1><div class="list morelist">
     <button class="item" data-act="verCuentas"><span class="ic">${svg('cash')}</span><div class="main"><span class="t">Cuentas corrientes</span><span class="s">Quién debe y cobrar en el momento</span></div></button>
     ${it('clientes','users','Clientes',Object.keys(S.clientes).length+' clientes · historial y lo que deben')}
-    ${it('estadisticas','chart','Estadísticas de ventas','Mes a mes por canal: local, WhatsApp, cuenta corriente')}
+    ${it('estadisticas','chart','Pedidos por canal','Qué porcentaje entra por el local y por WhatsApp')}
     ${it('catalogo','tag','Lista de precios',catalogo().length+' productos')}
     <button class="item" data-act="nuevoMov"><span class="ic">${svg('receipt')}</span><div class="main"><span class="t">Cargar factura o remito de proveedor</span><span class="s">Se guarda para administración. Después no se ve desde el local.</span></div></button>
   </div></div>`;
@@ -688,7 +688,27 @@ R.clientes = function(){
 function canalStat(p){ if(p.canal==='Mayorista') return 'Mayoristas'; if(p.canal==='Fecha especial') return 'Fecha especial'; if(p.origen==='bistrosoft') return 'Mostrador (Bistrosoft)';
   if(p.canal==='Local') return 'Local'; if(p.canal==='WhatsApp') return 'WhatsApp'; if(p.canal==='Cuenta corriente') return 'Cuenta corriente'; return 'Pedidos de planilla (sin canal)'; }
 const CANAL_ORDEN = ['Local','WhatsApp','Cuenta corriente','Mayoristas','Fecha especial','Mostrador (Bistrosoft)','Pedidos de planilla (sin canal)'];
+function statsLocal(){
+  const mes = U.mes; const meses = []; for(let i=5;i>=0;i--){ const d=new Date(mes+'-15T12:00:00'); d.setMonth(d.getMonth()-i); meses.push(d.toISOString().slice(0,7)); }
+  const K = ['Local','WhatsApp']; const agg = {};
+  pedidosArr().forEach(p=>{ const m=(p.entrega||'').slice(0,7); if(!meses.includes(m) || p.estado==='cancelado' || esVentaDia(p)) return; const k=canalStat(p); if(!K.includes(k)) return; const a=agg[m]||(agg[m]={Local:0,WhatsApp:0}); a[k]++; });
+  const tot = m => { const a=agg[m]||{}; return (a.Local||0)+(a.WhatsApp||0); };
+  const pc = (m,k) => tot(m)? Math.round((agg[m][k]||0)/tot(m)*100)+'%' : '—';
+  const t = tot(mes);
+  return `<div class="stack">
+    <a href="#mas" class="muted">‹ Más</a>
+    <div class="monthbar"><button class="btn" data-act="mes" data-n="-1" aria-label="Mes anterior">‹</button><div style="text-align:center"><div class="eyebrow">Pedidos por canal</div><h1>${esc(mesLabel(mes))}</h1></div><button class="btn" data-act="mes" data-n="1" aria-label="Mes siguiente">›</button></div>
+    <div class="card"><table class="stat-t"><thead><tr><th>Canal</th><th>%</th><th style="width:50%"></th></tr></thead><tbody>
+      ${t? K.map(k=>'<tr><td>'+k+'</td><td class="num"><b>'+pc(mes,k)+'</b></td><td><div class="sbar"><i style="width:'+((agg[mes][k]||0)/t*100)+'%"></i></div></td></tr>').join('') : '<tr><td colspan="3" class="muted">Todavía no hay pedidos por local o WhatsApp este mes.</td></tr>'}
+    </tbody></table></div>
+    <h3>Últimos 6 meses</h3>
+    <div class="card tbl-wrap"><table class="stat-t"><thead><tr><th>Canal</th>${meses.map(m=>'<th>'+esc(mesLabel(m).replace(/ de /,' ').slice(0,3)+' '+m.slice(2,4))+'</th>').join('')}</tr></thead><tbody>
+      ${K.map(k=>'<tr><td>'+k+'</td>'+meses.map(m=>'<td class="num">'+pc(m,k)+'</td>').join('')+'</tr>').join('')}</tbody></table></div>
+    <div class="note">Porcentaje de pedidos minoristas que entraron por el local y por WhatsApp, según la fecha de entrega.</div>
+  </div>`;
+}
 R.estadisticas = function(){
+  if(!verPlata()) return statsLocal();
   const mes = U.mes; const meses = []; for(let i=5;i>=0;i--){ const d=new Date(mes+'-15T12:00:00'); d.setMonth(d.getMonth()-i); meses.push(d.toISOString().slice(0,7)); }
   const agg = {}; pedidosArr().forEach(p=>{ const m=(p.entrega||'').slice(0,7); if(!meses.includes(m) || p.estado==='cancelado') return; const k=canalStat(p); const a=agg[k]||(agg[k]={}); const x=a[m]||(a[m]={n:0,t:0}); x.n++; x.t+=totPedido(p).total; });
   const filas = CANAL_ORDEN.filter(k=>agg[k]);
