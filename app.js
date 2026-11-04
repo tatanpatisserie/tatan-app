@@ -989,13 +989,74 @@ function textoPresu(d){
 }
 SHEETS.doc = function(){
   const d = SH.draft; const n = neg(); const total = sum(d.items||[],l=>num(l.cant)*num(l.precio))-num(d.descuento);
-  const body = '<div class="doc"><div class="dh"><div class="dn">'+esc(n.nombre)+'<small>'+esc(n.subtitulo||'')+'</small></div><div class="dt"><b>Presupuesto</b>N° '+pad(d.numero||0)+'<br>Emitido '+fdate(d.emision)+'</div></div>'+
+  const body = '<div class="doc"><div class="dh"><div class="dn"><img src="logo-tatan.png" alt="'+esc(n.nombre||'Tatan')+'"></div><div class="dt"><b>Presupuesto</b>N° '+pad(d.numero||0)+'<br>Emitido '+fdate(d.emision)+'</div></div>'+
     '<div class="meta"><div><span>Cliente</span>'+esc(d.clienteNombre||'—')+'</div><div><span>Contacto</span>'+esc(d.telefono||'—')+'</div><div><span>Evento</span>'+esc(d.evento||'—')+'</div><div><span>Fecha del evento</span>'+fdate(d.fechaEvento)+'</div><div><span>Invitados</span>'+esc(d.invitados||'—')+'</div><div><span>Válido hasta</span>'+fdate(d.validoHasta)+'</div></div>'+
     '<table><thead><tr><th>Producto</th><th class="r">Cant.</th><th class="r">Unitario</th><th class="r">Total</th></tr></thead><tbody>'+(d.items||[]).map(l=>'<tr><td>'+esc(l.nombre)+'</td><td class="r">'+esc(l.cant)+'</td><td class="r">'+$(l.precio)+'</td><td class="r">'+$(num(l.cant)*num(l.precio))+'</td></tr>').join('')+(num(d.descuento)?'<tr><td colspan="3">Descuento</td><td class="r">−'+$(num(d.descuento))+'</td></tr>':'')+'</tbody></table>'+
     '<div class="tot"><span>Total</span><span>'+$(total)+'</span></div>'+(d.obs?'<div class="obs">'+esc(d.obs)+'</div>':'')+
-    '<div class="foot">¡Gracias por elegirnos! · '+[n.telefono,n.instagram,n.direccion].filter(Boolean).map(esc).join(' · ')+'</div></div><p class="muted" style="font-size:12.5px;margin:0">Sacale una captura para mandarlo, o copiá el texto.</p>';
-  return { title:'Presupuesto para enviar', body, foot:'<button class="btn sm" data-act="backPresu">‹ Volver</button><span class="grow"></span><button class="btn sm" data-act="copyPresu">Copiar texto</button>'+(waLink(d.telefono,'x')?'<a class="btn pri sm" target="_blank" rel="noopener" href="'+esc(waLink(d.telefono,textoPresu(d)))+'">Enviar por WhatsApp</a>':'') };
+    '<div class="foot">¡Gracias por elegirnos! · '+[n.telefono,n.instagram,n.direccion].filter(Boolean).map(esc).join(' · ')+'</div></div><p class="muted" style="font-size:12.5px;margin:0">Descargalo como imagen para mandárselo al cliente.</p>';
+  return { title:'Presupuesto para enviar', body, foot:'<button class="btn sm" data-act="backPresu">‹ Volver</button><span class="grow"></span><button class="btn sm" data-act="copyPresu">Copiar texto</button><button class="btn pri sm" data-act="jpgPresu">Descargar JPG</button>'+(waLink(d.telefono,'x')?'<a class="btn pri sm" target="_blank" rel="noopener" href="'+esc(waLink(d.telefono,textoPresu(d)))+'">Enviar por WhatsApp</a>':'') };
 };
+/* Presupuesto como imagen JPG, con la identidad de Tatan */
+let LOGO_IMG = null;
+function cargarLogo(){ return LOGO_IMG ? Promise.resolve(LOGO_IMG) : new Promise(res=>{ const i=new Image(); i.onload=()=>{LOGO_IMG=i;res(i);}; i.onerror=()=>res(null); i.src='logo-tatan.png'; }); }
+async function presuJPG(d){
+  const n = neg(); const total = sum(d.items||[],l=>num(l.cant)*num(l.precio))-num(d.descuento);
+  try{ await Promise.all(['400 20px Nunito','700 20px Nunito','800 20px Nunito','400 20px Doughy'].map(f=>document.fonts.load(f))); }catch(e){}
+  const logo = await cargarLogo();
+  const W=1080, M=72, V='#703260', B='#FCEFD9', INK='#241B1F', MU='#7A6F74', LN='#E6E1DD';
+  const c=document.createElement('canvas'); const x=c.getContext('2d');
+  const F=(w,sz,fam)=>(w+' '+sz+'px '+(fam||'Nunito, sans-serif'));
+  const wrap=(t,maxW,font)=>{ x.font=font; const out=[]; String(t||'').split('\n').forEach(par=>{ let line=''; par.split(' ').forEach(w=>{ const tst=line?line+' '+w:w; if(x.measureText(tst).width>maxW && line){ out.push(line); line=w; } else line=tst; }); out.push(line); }); return out; };
+  // Medir alto
+  const colP=W-2*M-500; const filas=(d.items||[]).map(l=>({l, lines:wrap(l.nombre,colP,F(400,28))}));
+  const obsL = d.obs? wrap(d.obs,W-2*M,F(400,26)) : [];
+  let H = M+150+40+ 3*86 + 30 + 60 + filas.reduce((a,f)=>a+f.lines.length*38+26,0) + (num(d.descuento)?64:0) + 40 + 110 + (obsL.length? obsL.length*36+40:0) + 150;
+  c.width=W; c.height=H;
+  x.fillStyle='#FFFFFF'; x.fillRect(0,0,W,H);
+  x.fillStyle=V; x.fillRect(0,0,W,14);
+  let y=M;
+  if(logo){ const lh=110, lw=logo.width*lh/logo.height; x.drawImage(logo,M,y,lw,lh); } else { x.fillStyle=V; x.font=F(400,80,'Doughy, sans-serif'); x.textBaseline='top'; x.fillText(n.nombre||'Tatan',M,y); }
+  x.textAlign='right'; x.textBaseline='top';
+  x.fillStyle=V; x.font=F(400,46,'Doughy, Nunito, sans-serif'); x.fillText('PRESUPUESTO',W-M,y+4);
+  x.fillStyle=MU; x.font=F(600,26); x.fillText('N° '+pad(d.numero||0)+'  ·  Emitido '+fdate(d.emision),W-M,y+66);
+  x.textAlign='left'; y+=150;
+  x.fillStyle=V; x.fillRect(M,y,W-2*M,4); y+=40;
+  const meta=[['Cliente',d.clienteNombre],['Contacto',d.telefono],['Evento',d.evento],['Fecha del evento',d.fechaEvento?fdate(d.fechaEvento):''],['Invitados',d.invitados],['Válido hasta',d.validoHasta?fdate(d.validoHasta):'']];
+  meta.forEach((m,i)=>{ const cx = M + (i%2)*((W-2*M)/2), cy = y + Math.floor(i/2)*86;
+    x.fillStyle=MU; x.font=F(800,19); x.fillText(m[0].toUpperCase(),cx,cy); x.fillStyle=INK; x.font=F(600,29); x.fillText(String(m[1]||'—').slice(0,34),cx,cy+28); });
+  y += 3*86 + 30;
+  // Tabla
+  x.fillStyle=B; x.beginPath(); x.roundRect? x.roundRect(M,y,W-2*M,56,14) : x.rect(M,y,W-2*M,56); x.fill();
+  x.fillStyle=V; x.font=F(800,20); const cC=W-M-410, cU=W-M-215, cT=W-M-20;
+  x.fillText('PRODUCTO',M+20,y+18); x.textAlign='right'; x.fillText('CANT.',cC,y+18); x.fillText('UNITARIO',cU,y+18); x.fillText('TOTAL',cT,y+18); x.textAlign='left';
+  y+=60;
+  filas.forEach(f=>{ const l=f.l; let yy=y+14; x.fillStyle=INK; x.font=F(400,28); f.lines.forEach(t=>{ x.fillText(t,M+20,yy); yy+=38; });
+    x.textAlign='right'; x.font=F(600,28); x.fillText(String(l.cant||''),cC,y+14); x.fillText($(l.precio),cU,y+14); x.font=F(700,28); x.fillText($(num(l.cant)*num(l.precio)),cT,y+14); x.textAlign='left';
+    y += f.lines.length*38+26; x.fillStyle=LN; x.fillRect(M,y-6,W-2*M,2); });
+  if(num(d.descuento)){ x.fillStyle=INK; x.font=F(600,28); x.fillText('Descuento',M+20,y+14); x.textAlign='right'; x.fillText('−'+$(num(d.descuento)),cT,y+14); x.textAlign='left'; y+=64; }
+  y+=40;
+  // Total
+  const tw=520, th=90; x.fillStyle=V; x.beginPath(); x.roundRect? x.roundRect(W-M-tw,y,tw,th,45) : x.rect(W-M-tw,y,tw,th); x.fill();
+  x.fillStyle=B; x.textBaseline='middle'; x.font=F(700,30); x.fillText('Total',W-M-tw+40,y+th/2); x.textAlign='right'; x.font=F(800,42); x.fillText($(total),W-M-40,y+th/2); x.textAlign='left'; x.textBaseline='top';
+  y+=th+20;
+  if(obsL.length){ y+=20; x.fillStyle='#5E5458'; x.font=F(400,26); obsL.forEach(t=>{ x.fillText(t,M,y); y+=36; }); }
+  // Pie
+  const fy=H-110; x.fillStyle=LN; x.fillRect(M,fy,W-2*M,2);
+  x.textAlign='center'; x.fillStyle=V; x.font=F(700,26); x.fillText('¡Gracias por elegirnos!',W/2,fy+26);
+  const datos=[n.telefono,n.instagram,n.direccion].filter(Boolean).join('  ·  '); if(datos){ x.fillStyle=MU; x.font=F(600,22); x.fillText(datos,W/2,fy+62); }
+  x.textAlign='left';
+  return new Promise(res=>c.toBlob(res,'image/jpeg',0.92));
+}
+async function bajarPresuJPG(d){
+  toast('Armando la imagen…');
+  const blob = await presuJPG(d); if(!blob){ toast('No se pudo armar la imagen'); return; }
+  const nombre = ('Presupuesto '+pad(d.numero||0)+(d.clienteNombre?' - '+d.clienteNombre:'')).normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^\w .-]/g,'').trim()+'.jpg';
+  const file = (typeof File==='function') ? new File([blob], nombre, {type:'image/jpeg'}) : null;
+  const tactil = matchMedia('(pointer:coarse)').matches;
+  if(tactil && file && navigator.canShare && navigator.canShare({files:[file]})){ try{ await navigator.share({files:[file], title:nombre}); return; }catch(e){ if(e && e.name==='AbortError') return; } }
+  const url = URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=nombre; document.body.appendChild(a); a.click(); setTimeout(()=>{ a.remove(); URL.revokeObjectURL(url); }, 4000);
+  toast('Presupuesto descargado');
+}
 SHEETS.texto = function(){ return { title:'Copiá este texto', body:'<p class="muted" style="margin:0">No se pudo copiar solo. Mantené apretado el texto para seleccionarlo.</p><textarea class="f" id="txtcopy" style="min-height:300px" readonly>'+esc(SH.draft.text)+'</textarea>', foot:'<span class="grow"></span><button class="btn pri" data-act="close">Listo</button>' }; };
 SHEETS.gasto = function(){
   const d = SH.draft;
@@ -1627,6 +1688,7 @@ const A = {
   verDoc: () => { SH.prev = 'presu'; SH.type='doc'; renderSheet(); },
   backPresu: () => { SH.type='presu'; renderSheet(); },
   copyPresu: () => copy(textoPresu(SH.draft)),
+  jpgPresu: () => bajarPresuJPG(SH.draft),
   presuAPedido: async () => { const d=SH.draft; if(!(d.items||[]).length){ toast('El presupuesto no tiene productos'); return; }
     if(d.clienteNombre) d.clienteId=findOrCreateCliente(d);
     const pid = await save('pedidos', nuevoPedido({clienteNombre:d.clienteNombre, clienteId:d.clienteId||'', telefono:d.telefono, canal:'Evento', entrega:d.fechaEvento||today(), items:clone(d.items), descuento:d.descuento, notas:[d.evento, d.invitados?d.invitados+' invitados':'', 'Presupuesto N° '+pad(d.numero)].filter(Boolean).join(' · '), presupuestoId:d.id||''}));
