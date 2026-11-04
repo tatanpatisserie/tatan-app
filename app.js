@@ -316,7 +316,7 @@ const TABSETS = {
   local:[['pedidos','Pedidos','bag'],['presupuestos','Presupuestos','doc'],['stockpt','Stock','box'],['produccion','Producción','whisk'],['mas','Más','dots']],
   cocina:[['semana','Semana','bag'],['produccion','Producción','whisk'],['stockpt','Stock','box'],['stock','Mercadería','tag']]
 };
-const ALLOWED = { todo: VIEWS, local:['semana','pedidos','presupuestos','stockpt','produccion','mas','clientes','catalogo'], cocina:['semana','produccion','stockpt','stock'] };
+const ALLOWED = { todo: VIEWS, local:['semana','pedidos','presupuestos','stockpt','produccion','mas','clientes','catalogo','estadisticas'], cocina:['semana','produccion','stockpt','stock'] };
 const SUBOF = {estadisticas:'mas',semana:'produccion',empleados:'mas',proveedores:'mas',equipo:'mas',historial:'mas',gastos:'mas',clientes:'mas',catalogo:'mas',stock:'mas',ajustes:'mas',costos:'mas'};
 const verPlata = () => SECTOR==='todo';
 function route(){ const h = (location.hash||'').slice(1); const ok = ALLOWED[SECTOR]||VIEWS; U.view = (VIEWS.includes(h) && ok.includes(h)) ? h : TABSETS[SECTOR][0][0]; if(U.view==='historial') HIST=null; render(); window.scrollTo(0,0); }
@@ -582,7 +582,9 @@ R.mas = function(){
   const it = (h,ic,t,s) => '<a class="item" href="#'+h+'" style="text-decoration:none;color:inherit"><span class="ic">'+svg(ic)+'</span><div class="main"><span class="t">'+t+'</span><span class="s">'+s+'</span></div>'+svg('chev','muted').replace('<svg','<svg style="width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:2"')+'</a>';
   const m = metricas(U.mes);
   if(SECTOR==='local') return `<div class="stack"><h1>Más</h1><div class="list morelist">
+    <button class="item" data-act="verCuentas"><span class="ic">${svg('cash')}</span><div class="main"><span class="t">Cuentas corrientes</span><span class="s">Quién debe y cobrar en el momento</span></div></button>
     ${it('clientes','users','Clientes',Object.keys(S.clientes).length+' clientes · historial y lo que deben')}
+    ${it('estadisticas','chart','Estadísticas de ventas','Mes a mes por canal: local, WhatsApp, cuenta corriente')}
     ${it('catalogo','tag','Lista de precios',catalogo().length+' productos')}
     <button class="item" data-act="nuevoMov"><span class="ic">${svg('receipt')}</span><div class="main"><span class="t">Cargar factura o remito de proveedor</span><span class="s">Se guarda para administración. Después no se ve desde el local.</span></div></button>
   </div></div>`;
@@ -1562,6 +1564,7 @@ const A = {
   nuevoPedido: () => openSheet('pedido', nuevoPedido({canal:'WhatsApp'})),
   nuevoMay: () => openSheet('pedMay', nuevoPedido({canal:'Mayorista', remito: proxRemito(), iva:false, entrega: today()})),
   pedTipo: el => { U.pedTipo = el.dataset.v; U.pedLim = 120; render(); },
+  verCuentas: () => { U.fCli='Cuenta corriente'; U.q=''; location.hash='#clientes'; },
   fCli: el => { U.fCli = el.dataset.v; U.cliLim = 200; render(); },
   masCli: () => { U.cliLim = (U.cliLim||200)+300; render(); },
   cobrarCC: async () => { const d=SH.draft; let monto = num((document.getElementById('cc-monto')||{}).value); const medio=(document.getElementById('cc-medio')||{}).value||'Efectivo';
