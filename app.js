@@ -326,7 +326,7 @@ window.addEventListener('hashchange', route);
 function render(){
   setSync();
   const n = neg();
-  document.getElementById('brand').innerHTML = '<img src="logo-tatan.png" alt="'+esc(n.nombre||'Tatan')+'" class="logo"><small>' + esc(n.subtitulo||'Gestión del local') + '</small>';
+  document.getElementById('brand').innerHTML = '<img src="logo-tatan.png" alt="'+esc(n.nombre||'Tatan')+'" class="logo">';
   const tabs = TABSETS[SECTOR] || TABSETS.todo;
   const active = tabs.some(t=>t[0]===U.view) ? U.view : (SUBOF[U.view] || U.view);
   document.getElementById('tabs').style.gridTemplateColumns = 'repeat('+tabs.length+',1fr)';
