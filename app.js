@@ -260,11 +260,12 @@ function lineaCosto(l){
 const IVA_PCT = 21;
 function totPedido(p){
   const sub = sum(p.items||[], l=>num(l.cant)*num(l.precio));
-  const total = sub - num(p.descuento); const envio = num(p.envio);
+  const desc = num(p.descPct) ? Math.round(sub*num(p.descPct))/100 : num(p.descuento);
+  const total = sub - desc; const envio = num(p.envio);
   // IVA solo en mayoristas "con IVA": los precios de lista mayorista son sin IVA. No suma a lo facturado (es del fisco).
   const iva = p.iva ? Math.round(total*IVA_PCT)/100 : 0;
   const aCobrar = total + iva + envio; const pagado = sum(p.pagos||[], x=>num(x.monto));
-  return { sub, total, iva, envio, aCobrar, pagado, saldo: aCobrar - pagado };
+  return { sub, desc, total, iva, envio, aCobrar, pagado, saldo: aCobrar - pagado };
 }
 const pedidosArr = () => Object.values(S.pedidos);
 function metricas(mes){
@@ -374,16 +375,17 @@ R.empleados = function(){
 };
 const lunesDe = iso => { const d=new Date(iso+'T12:00:00'); const w=(d.getDay()+6)%7; d.setDate(d.getDate()-w); return isoDate(d); };
 const DIAS_LARGOS = ['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'];
+const esVentaDia = p => p.origen==='bistrosoft' || p.clienteNombre==='Mostrador';
 R.semana = function(){
   const ini = U.semana || lunesDe(today()); const fin = addDays(ini,6);
-  const fc = U.fSem||''; const q = norm(U.qSem||'');
-  let peds = pedidosArr().filter(p => (p.entrega||'')>=ini && (p.entrega||'')<=fin && p.estado!=='cancelado' && p.canal!=='Local');
+  const fc = U.fSem==='may' ? 'may' : 'min'; const q = norm(U.qSem||'');
+  let peds = pedidosArr().filter(p => (p.entrega||'')>=ini && (p.entrega||'')<=fin && p.estado!=='cancelado' && !esVentaDia(p));
   if(fc==='may') peds = peds.filter(p=>p.canal==='Mayorista'); if(fc==='min') peds = peds.filter(p=>p.canal!=='Mayorista');
   if(q) peds = peds.filter(p=>norm(p.clienteNombre+' '+(p.items||[]).map(i=>i.nombre).join(' ')+' '+(p.notas||'')).includes(q));
   const totItems = sum(peds,p=>(p.items||[]).length), listos = sum(peds,p=>(p.items||[]).filter(i=>i.listo).length);
   const dias = []; for(let i=0;i<7;i++){ const f=addDays(ini,i); const ps=peds.filter(p=>p.entrega===f).sort(byEntrega); if(i<6 || ps.length) dias.push({f, i, ps}); }
   const card = p => { const its=p.items||[]; const l=its.filter(x=>x.listo).length; const done=its.length && l===its.length;
-    return '<div class="wcard'+(done?' done':'')+'"><div class="wh"><div><b>'+esc(p.clienteNombre||'Sin nombre')+'</b>'+(p.hora?' <span class="muted num" style="font-size:12.5px">'+esc(p.hora)+'</span>':'')+'</div>'+(p.canal==='Mayorista'?'<span class="pill p-neu">May.</span>':'')+'</div>'+
+    return '<div class="wcard'+(done?' done':'')+'"><div class="wh"><div><b>'+esc(p.clienteNombre||'Sin nombre')+'</b>'+(p.retiraOtro&&p.retiraNombre?' <span class="muted" style="font-size:12.5px">· retira '+esc(p.retiraNombre)+'</span>':'')+(p.hora?' <span class="muted num" style="font-size:12.5px">'+esc(p.hora)+'</span>':'')+'</div>'+(p.canal==='Mayorista'?'<span class="pill p-neu">May.</span>':'')+'</div>'+
       (its.length?'<div class="bar"><i style="width:'+(l/its.length*100)+'%"></i></div>':'')+
       '<div class="cklist">'+its.map((x,i)=>'<div class="ckrow'+(x.listo?' done':'')+'">'+check(x.listo,'tglPed','data-id="'+p.id+'" data-i="'+i+'"')+'<span class="ckn"><b class="num">'+esc(fmtNum(x.cant))+'</b> '+esc(x.nombre)+'</span></div>').join('')+'</div>'+
       (p.notas?'<div class="wnote">'+esc(p.notas)+'</div>':'')+
@@ -393,7 +395,7 @@ R.semana = function(){
   const chip = (v,l) => '<button class="chip" data-act="fSem" data-v="'+v+'" aria-pressed="'+(fc===v)+'">'+l+'</button>';
   return `<div class="stack">
     <div class="monthbar"><button class="btn" data-act="semNav" data-n="-7" aria-label="Semana anterior">‹</button><div style="text-align:center"><div class="eyebrow">Pedidos de la semana</div><h1>${fdateShort(ini).replace(/^\S+ /,'')} al ${fdateShort(addDays(ini,5)).replace(/^\S+ /,'')}</h1></div><button class="btn" data-act="semNav" data-n="7" aria-label="Semana siguiente">›</button></div>
-    <div class="row between" style="flex-wrap:wrap;gap:8px"><div class="chips">${chip('','Todos')}${chip('may','Mayoristas')}${chip('min','Minoristas')}${ini!==lunesDe(today())?'<button class="chip" data-act="semHoy">Esta semana</button>':''}</div>
+    <div class="row between" style="flex-wrap:wrap;gap:8px"><div class="chips">${chip('min','Minoristas')}${chip('may','Mayoristas')}${ini!==lunesDe(today())?'<button class="chip" data-act="semHoy">Esta semana</button>':''}</div>
       <div class="row" style="gap:8px"><span class="pill ${totItems&&listos===totItems?'p-ok':'p-pis'}">${listos}/${totItems} listos</span>${SECTOR!=='cocina'?'<button class="btn sm" data-act="nuevoPedido">'+svg('plus')+'Minorista</button><button class="btn pri sm" data-act="nuevoMay">'+svg('plus')+'Mayorista</button>':''}</div></div>
     <div class="search">${svg('search')}<input class="f" id="qsem" placeholder="Buscar cliente o producto" value="${esc(U.qSem||'')}" data-bind="qSem"></div>
     <div class="week">${dias.map(d=>'<section class="wday'+(d.f===today()?' hoy':'')+'"><h3><span>'+DIAS_LARGOS[d.i]+' '+(+d.f.slice(8))+'/'+(+d.f.slice(5,7))+'</span><span class="muted num" style="font-size:12px">'+(d.ps.length?d.ps.length+' ped.':'')+'</span></h3>'+(d.ps.length?d.ps.map(card).join(''):'<div class="wempty">Sin pedidos</div>')+'</section>').join('')}</div>
@@ -474,7 +476,7 @@ R.inicio = function(){
 const byEntrega = (a,b) => ((a.entrega||'')+(a.hora||'')).localeCompare((b.entrega||'')+(b.hora||''));
 const ESTADOS = {pendiente:['Pendiente','p-neu'], produccion:['En producción','p-pis'], listo:['Listo','p-acc'], entregado:['Entregado','p-ok'], cancelado:['Cancelado','p-bad']};
 const CANALES = ['Pedido particular','Local','Evento','Fecha especial','Mayorista','Empresa','Cuenta corriente'];
-const CANALES_MIN = CANALES.filter(c=>c!=='Mayorista');
+const CANALES_MIN = ['Local','WhatsApp','Cuenta corriente'];
 const MEDIOS = ['Efectivo','Transferencia','QR Galicia','Mercado Pago','Tarjeta','Cuenta corriente'];
 function saldoPill(p){ const t = totPedido(p); if(t.aCobrar<=0) return ''; if(t.saldo<=0.5) return '<span class="pill p-ok">Pagado</span>'; if(t.pagado>0) return '<span class="pill p-warn">Debe '+$(t.saldo)+'</span>'; return '<span class="pill p-bad">Sin seña</span>'; }
 function pedidoItem(p){
@@ -482,7 +484,7 @@ function pedidoItem(p){
   const resumen = (p.items||[]).map(l => (num(l.cant)!==1?l.cant+'× ':'')+l.nombre).join(', ');
   return '<button class="item" data-act="editPedido" data-id="'+p.id+'">'+
     '<div class="datechip'+(p.entrega===today()?' today':'')+'">'+(d?'<span>'+DIAS[d.getDay()]+'</span><b>'+d.getDate()+'</b>':'<b>?</b>')+'</div>'+
-    '<div class="main"><span class="t">'+esc(p.clienteNombre||'Sin nombre')+(p.remito?' <span class="muted" style="font-weight:500">· Rto '+esc(p.remito)+'</span>':'')+(p.hora?' <span class="muted" style="font-weight:500">· '+esc(p.hora)+'</span>':'')+'</span><span class="s">'+esc(resumen||'Sin productos')+'</span>'+
+    '<div class="main"><span class="t">'+esc(p.clienteNombre||'Sin nombre')+(p.remito?' <span class="muted" style="font-weight:500">· Rto '+esc(p.remito)+'</span>':'')+(p.retiraOtro&&p.retiraNombre?' <span class="muted" style="font-weight:500">· retira '+esc(p.retiraNombre)+'</span>':'')+(p.hora?' <span class="muted" style="font-weight:500">· '+esc(p.hora)+'</span>':'')+'</span><span class="s">'+esc(resumen||'Sin productos')+'</span>'+
     '<span class="row" style="gap:5px"><span class="pill '+e[1]+'">'+e[0]+'</span>'+progresoPill(p)+(p.canal&&p.canal!=='Pedido particular'&&p.canal!=='Mayorista'?'<span class="pill p-neu">'+esc(p.canal)+'</span>':'')+(p.iva?'<span class="pill p-neu">Con IVA</span>':'')+'</span></div>'+
     '<div class="end"><span class="num" style="font-weight:700">'+$(t.aCobrar)+'</span>'+saldoPill(p)+'</div></button>';
 }
@@ -497,6 +499,7 @@ R.pedidos = function(){
   if((U.pedVista||'semana')==='semana') return '<div class="stack"><div class="row between"><h1>Pedidos</h1>'+vistaPedBtns()+'</div>'+R.semana()+'</div>';
   const may = U.pedTipo==='may', fe = U.pedTipo==='fe';
   arr = arr.filter(p => may ? p.canal==='Mayorista' : fe ? p.canal==='Fecha especial' : (p.canal!=='Mayorista' && p.canal!=='Fecha especial'));
+  if(!may && !fe) arr = arr.filter(p=>!esVentaDia(p));
   if(!may && U.fCanal) arr = arr.filter(p=>(p.canal||'Pedido particular')===U.fCanal);
   if(q) arr = arr.filter(p=> norm(p.clienteNombre+' '+(p.remito||'')+' '+(p.items||[]).map(l=>l.nombre).join(' ')+' '+(p.notas||'')).includes(q));
   arr.sort(byEntrega); if(f==='entregados'||f==='todos') arr.reverse();
@@ -511,7 +514,7 @@ R.pedidos = function(){
     ${fe?'<div class="note">Esta solapa la vamos a armar a medida más adelante. Por ahora muestra las ventas de fecha especial cargadas.</div>':''}
     <div class="search">${svg('search')}<input class="f" id="qped" placeholder="${may?'Buscar por cliente, remito o producto':'Buscar por cliente o producto'}" value="${esc(U.q)}" data-bind="q"></div>
     <div class="chips">${chip('activos','Activos')}${chip('deben','Deben plata')}${chip('entregados','Entregados')}${chip('todos','Todos')}
-      ${may||fe?'':'<select class="chip" id="fcanal" data-bind="fCanal" aria-label="Canal"><option value="">Todos los canales</option>'+CANALES_MIN.filter(c=>c!=='Fecha especial').map(c=>'<option'+(U.fCanal===c?' selected':'')+'>'+c+'</option>').join('')+'</select>'}</div>
+      ${may||fe?'':'<select class="chip" id="fcanal" data-bind="fCanal" aria-label="Canal"><option value="">Todos los canales</option>'+CANALES_MIN.map(c=>'<option'+(U.fCanal===c?' selected':'')+'>'+c+'</option>').join('')+'</select>'}</div>
     ${groups.length ? groups.map(g=>'<div class="group-h">'+esc(gname(g.k))+'</div><div class="list">'+g.items.map(pedidoItem).join('')+'</div>').join('') + (totalArr>lim?'<button class="btn" data-act="masPed">Ver más ('+(totalArr-lim).toLocaleString('es-AR')+')</button>':'') :
       (may ? '<div class="card empty"><h2>No hay pedidos mayoristas acá</h2><p>Cargá el pedido con el cliente, el remito y los productos con el precio de la lista mayorista.</p><button class="btn pri" data-act="nuevoMay">Nuevo pedido mayorista</button></div>'
            : '<div class="card empty"><h2>No hay pedidos acá</h2><p>Cargá un pedido con fecha de entrega, seña y saldo. Lo ves en Inicio y en la lista del día.</p><button class="btn pri" data-act="nuevoPedido">Nuevo pedido</button></div>')}
@@ -812,13 +815,19 @@ function itemsEditor(items){
     (items.length? items.map((l,i)=>'<div class="line"><div class="nm">'+esc(l.nombre)+(l.pid?'':'<small>ítem libre</small>')+'</div><input class="f num" id="it-c-'+i+'" data-it="'+i+'" data-k="cant" type="number" inputmode="decimal" step="any" value="'+esc(l.cant)+'" aria-label="Cantidad"><input class="f num" id="it-p-'+i+'" data-it="'+i+'" data-k="precio" type="number" inputmode="decimal" step="any" value="'+esc(l.precio)+'" aria-label="Precio unitario"><button class="rm" data-act="rmItem" data-i="'+i+'" aria-label="Quitar">×</button></div>').join('') : '<div class="muted" style="font-size:13px">Todavía no agregaste productos.</div>')+
     '</div>'+(items.length?'<div class="row muted" style="font-size:11.5px;justify-content:flex-end;gap:4px;padding-right:44px"><span style="width:64px;text-align:center">cant.</span><span style="width:96px;text-align:center">precio unit.</span></div>':'')+'</div>';
 }
+const telKey = t => { const x=String(t||'').replace(/\D/g,''); return x.length>=8 ? x.slice(-8) : ''; };
+function clientePorTel(tel){ const k=telKey(tel); if(!k) return null; return Object.values(S.clientes).find(c=>telKey(c.telefono)===k) || null; }
 function clienteFields(d){
   const opts = Object.values(S.clientes).map(c=>'<option value="'+esc(c.nombre)+'">').join('');
-  return '<datalist id="dl-cli">'+opts+'</datalist><div class="grid2">'+fld('clienteNombre','Cliente',d.clienteNombre,'text','list="dl-cli" autocomplete="off"')+fld('telefono','Teléfono',d.telefono,'tel')+'</div>';
+  const conocido = d.telefono && clientePorTel(d.telefono);
+  return '<datalist id="dl-cli">'+opts+'</datalist><div class="grid2">'+fld('telefono','Teléfono',d.telefono,'tel','placeholder="Ej: 223 555 1234"')+fld('clienteNombre','Cliente',d.clienteNombre,'text','list="dl-cli" autocomplete="off"')+'</div>'+
+    (conocido?'<div class="muted" style="font-size:12.5px;margin-top:-6px">Cliente ya cargado con ese teléfono.</div>':'')+
+    (SH.type==='pedido' ? '<label class="ckline"><input type="checkbox" data-act="tglRetira" '+(d.retiraOtro?'checked':'')+'> Retira otra persona</label>'+(d.retiraOtro?fld('retiraNombre','Nombre de quien retira',d.retiraNombre||'','text','autocomplete="off"'):'') : '');
 }
 function findOrCreateCliente(d){
   const nombre = (d.clienteNombre||'').trim(); if(!nombre) return null;
-  let c = Object.values(S.clientes).find(x=>norm(x.nombre)===norm(nombre));
+  const porTel = clientePorTel(d.telefono); if(porTel) return porTel.id;
+  let c = Object.values(S.clientes).find(x=>norm(x.nombre)===norm(nombre) && (!telKey(x.telefono) || !telKey(d.telefono)));
   if(c){ if(d.telefono && !c.telefono) save('clientes', Object.assign({}, c, {telefono:d.telefono})); return c.id; }
   const id = uid(); save('clientes', {id, nombre, telefono:d.telefono||'', tipo: d.canal==='Mayorista'?'Mayorista':d.canal==='Empresa'?'Empresa':'Particular', creado: today()});
   return id;
@@ -836,13 +845,14 @@ SHEETS.pedido = function(){
   const costo = sum(d.items||[], l=>lineaCosto(l).costo);
   const pays = (d.pagos||[]).map((x,i)=>'<div class="pay"><input class="f pf" id="pg-f-'+i+'" type="date" data-pg="'+i+'" data-k="f" value="'+esc(x.f)+'" aria-label="Fecha"><input class="f num" id="pg-m-'+i+'" type="number" inputmode="decimal" step="any" data-pg="'+i+'" data-k="monto" value="'+esc(x.monto)+'" aria-label="Monto"><select class="f" id="pg-x-'+i+'" data-pg="'+i+'" data-k="medio" aria-label="Medio">'+MEDIOS.map(m=>'<option'+(x.medio===m?' selected':'')+'>'+m+'</option>').join('')+'</select><button class="rm" data-act="rmPago" data-i="'+i+'" aria-label="Quitar pago" style="border:0;background:none;font-size:18px;color:var(--muted);cursor:pointer">×</button></div>').join('');
   const body = clienteFields(d)+
-    '<div class="grid3">'+sel('canal','Canal',d.canal,CANALES_MIN.includes(d.canal)?CANALES_MIN:CANALES)+fld('entrega','Fecha de entrega',d.entrega,'date')+fld('hora','Hora',d.hora,'time')+'</div>'+
+    '<div class="grid3">'+sel('canal','Canal',d.canal,(CANALES_MIN.includes(d.canal)||d.canal==='Fecha especial'&&false)?CANALES_MIN:CANALES_MIN.concat(d.canal?[d.canal]:[]))+fld('entrega','Fecha de entrega',d.entrega,'date')+fld('hora','Hora',d.hora,'time')+'</div>'+
     sel('estado','Estado',d.estado,Object.entries(ESTADOS).map(([k,v])=>[k,v[0]]))+
     machete(d)+
     itemsEditor(d.items||[])+
-    '<div class="grid2">'+fld('descuento','Descuento ($)',d.descuento||'','number')+fld('envio','Envío ($, va aparte)',d.envio||'','number')+'</div>'+
+    '<div class="stack" style="gap:6px"><span class="lb" style="margin:0">Descuento</span><div class="subtabs">'+[0,10,15,20].map(v=>'<button data-act="pedDesc" data-v="'+v+'" aria-pressed="'+(num(d.descPct)===v && !(v===0 && num(d.descuento)))+'">'+(v?v+'%':'Sin descuento')+'</button>').join('')+'</div></div>'+
+    '<div class="grid2">'+(num(d.descPct)?'<div class="tile"><span class="k">Descuento '+num(d.descPct)+'%</span><span class="v num" style="font-size:18px">−'+$(t.desc)+'</span></div>':fld('descuento','Otro descuento ($)',d.descuento||'','number'))+fld('envio','Envío ($, va aparte)',d.envio||'','number')+'</div>'+
     '<div class="stack" style="gap:8px"><div class="row between"><h3>Pagos y señas</h3><div class="row"><button class="btn sm" data-act="addPago" data-tipo="sena">Seña 50%</button><button class="btn sm" data-act="addPago" data-tipo="saldo">Saldo completo</button><button class="btn sm ghost" data-act="addPago" data-tipo="otro">+ Pago</button></div></div><div class="pays">'+(pays||'<div class="muted" style="font-size:13px">Sin pagos registrados.</div>')+'</div></div>'+
-    '<div class="totals num"><div class="r"><span>Productos</span><span>'+$(t.sub)+'</span></div>'+(num(d.descuento)?'<div class="r"><span>Descuento</span><span>−'+$(num(d.descuento)).slice(0)+'</span></div>':'')+(t.envio?'<div class="r"><span>Envío</span><span>'+$(t.envio)+'</span></div>':'')+'<div class="r big"><span>Total a cobrar</span><span>'+$(t.aCobrar)+'</span></div><div class="r"><span>Pagado</span><span>'+$(t.pagado)+'</span></div><div class="r" style="font-weight:700;color:'+(t.saldo>0.5?'var(--bad)':'var(--ok)')+'"><span>Saldo</span><span>'+$(t.saldo)+'</span></div>'+
+    '<div class="totals num"><div class="r"><span>Productos</span><span>'+$(t.sub)+'</span></div>'+(t.desc?'<div class="r"><span>Descuento'+(num(d.descPct)?' '+num(d.descPct)+'%':'')+'</span><span>−'+$(t.desc)+'</span></div>':'')+(t.envio?'<div class="r"><span>Envío</span><span>'+$(t.envio)+'</span></div>':'')+'<div class="r big"><span>Total a cobrar</span><span>'+$(t.aCobrar)+'</span></div><div class="r"><span>Pagado</span><span>'+$(t.pagado)+'</span></div><div class="r" style="font-weight:700;color:'+(t.saldo>0.5?'var(--bad)':'var(--ok)')+'"><span>Saldo</span><span>'+$(t.saldo)+'</span></div>'+
     (verPlata()?'<div class="r muted" style="font-size:12.5px;border-top:1px dashed var(--line);padding-top:6px;margin-top:3px"><span>Costo estimado · ganancia del pedido</span><span>'+$(costo)+' · '+$(t.total-costo)+'</span></div>':'')+'</div>'+
     '<label class="lb">Notas (sabores, deco, dirección de entrega)<textarea class="f" id="d-notas" data-d="notas">'+esc(d.notas||'')+'</textarea></label>'+
     delBlock('este pedido');
@@ -883,9 +893,9 @@ SHEETS.pedMay = function(){
 };
 function resumenPedido(d){
   const t = totPedido(d); const n = neg();
-  return [n.nombre+' · '+(d.canal==='Mayorista'?'Remito'+(d.remito?' N° '+d.remito:''):'Pedido'), d.clienteNombre?'Cliente: '+d.clienteNombre:'', d.entrega?'Entrega: '+fdateShort(d.entrega)+(d.hora?' '+d.hora:''):'', '',
+  return [n.nombre+' · '+(d.canal==='Mayorista'?'Remito'+(d.remito?' N° '+d.remito:''):'Pedido'), d.clienteNombre?'Cliente: '+d.clienteNombre:'', d.retiraOtro&&d.retiraNombre?'Retira: '+d.retiraNombre:'', d.entrega?'Entrega: '+fdateShort(d.entrega)+(d.hora?' '+d.hora:''):'', '',
     ...(d.items||[]).map(l=>'• '+l.cant+' × '+l.nombre+' — '+$(num(l.cant)*num(l.precio))),
-    num(d.descuento)?'Descuento: −'+$(num(d.descuento)):'', t.iva?'Subtotal: '+$(t.total):'', t.iva?'IVA '+IVA_PCT+'%: '+$(t.iva):'', t.envio?'Envío: '+$(t.envio):'', 'Total'+(d.canal==='Mayorista'?(d.iva?' con IVA':' sin IVA'):'')+': '+$(t.aCobrar), t.pagado?'Pagado: '+$(t.pagado):'', t.pagado&&t.saldo>0.5?'Saldo a abonar: '+$(t.saldo):'', d.notas?'\nNotas: '+d.notas:''].filter(x=>x!=='').join('\n').replace(/\n\n+/g,'\n\n');
+    t.desc?'Descuento'+(num(d.descPct)?' '+num(d.descPct)+'%':'')+': −'+$(t.desc):'', t.iva?'Subtotal: '+$(t.total):'', t.iva?'IVA '+IVA_PCT+'%: '+$(t.iva):'', t.envio?'Envío: '+$(t.envio):'', 'Total'+(d.canal==='Mayorista'?(d.iva?' con IVA':' sin IVA'):'')+': '+$(t.aCobrar), t.pagado?'Pagado: '+$(t.pagado):'', t.pagado&&t.saldo>0.5?'Saldo a abonar: '+$(t.saldo):'', d.notas?'\nNotas: '+d.notas:''].filter(x=>x!=='').join('\n').replace(/\n\n+/g,'\n\n');
 }
 SHEETS.presu = function(){
   const d = SH.draft; const sub = sum(d.items||[],l=>num(l.cant)*num(l.precio)); const total = sub-num(d.descuento);
@@ -1494,9 +1504,11 @@ const A = {
     else if(t==='receta'){ const id=SH.draft.id; if(catalogo().some(p=>p.recetaId===id)) saveDoc('catalogo',{items:catalogo().map(p=>p.recetaId===id?Object.assign({},p,{recetaId:'',factor:''}):p)}); remove('recetas', id); }
     else remove(map[t], SH.draft.id);
     closeSheet(); toast('Borrado'); },
-  nuevoPedido: () => openSheet('pedido', nuevoPedido()),
+  nuevoPedido: () => openSheet('pedido', nuevoPedido({canal:'WhatsApp'})),
   nuevoMay: () => openSheet('pedMay', nuevoPedido({canal:'Mayorista', remito: proxRemito(), iva:false, entrega: today()})),
   pedTipo: el => { U.pedTipo = el.dataset.v; U.pedLim = 120; render(); },
+  pedDesc: el => { const v=num(el.dataset.v); SH.draft.descPct = v||''; if(v) SH.draft.descuento=''; renderSheet(); },
+  tglRetira: el => { SH.draft.retiraOtro = !SH.draft.retiraOtro; if(!SH.draft.retiraOtro) SH.draft.retiraNombre=''; renderSheet(); if(SH.draft.retiraOtro) setTimeout(()=>{ const x=document.getElementById('d-retiraNombre'); if(x) x.focus(); },30); },
   pedVista: el => { U.pedVista = el.dataset.v; render(); },
   nuevoFE: () => openSheet('pedido', nuevoPedido({canal:'Fecha especial'})),
   pedIva: el => { SH.draft.iva = el.dataset.v==='1'; renderSheet(); },
@@ -1517,7 +1529,7 @@ const A = {
     if(d.canal==='Mayorista' && !(d.clienteNombre||'').trim()){ toast('Elegí el cliente'); return; }
     if(d.canal==='Mayorista' && d.remito && pedidosArr().some(p=>p.id!==d.id && p.canal==='Mayorista' && String(p.remito)===String(d.remito).trim() && (p.entrega||'').slice(0,4)===(d.entrega||'').slice(0,4))){ toast('Ya hay un pedido con el remito N° '+d.remito); return; }
     if(SH.venta && !(d.pagos||[]).length){ d.pagos=[{f:d.entrega||today(), monto: totPedido(d).aCobrar, medio:'Efectivo'}]; }
-    if(d.clienteNombre && d.clienteNombre!=='Mostrador') d.clienteId = findOrCreateCliente(d);
+    delete d._autoNom; if(d.clienteNombre && d.clienteNombre!=='Mostrador') d.clienteId = findOrCreateCliente(d);
     closeSheet(); await save('pedidos', d); toast(esVenta?'Venta registrada':'Pedido guardado'); },
   nuevoPresu: () => openSheet('presu', nuevoPresu()),
   editPresu: el => { const p=S.presupuestos[el.dataset.id]; if(p) openSheet('presu', clone(p)); },
@@ -1542,7 +1554,7 @@ const A = {
   nuevoCliente: () => openSheet('cliente', {nombre:'', telefono:'', tipo:'Particular', notas:''}),
   verCliente: el => { const c=S.clientes[el.dataset.id]; if(c) openSheet('cliente', clone(c)); },
   saveCliente: () => { const d=SH.draft; if(!(d.nombre||'').trim()){ toast('Poné el nombre'); return; } save('clientes', d); closeSheet(); toast('Cliente guardado'); },
-  pedidoParaCliente: () => { const c=SH.draft; openSheet('pedido', nuevoPedido({clienteNombre:c.nombre, telefono:c.telefono||'', clienteId:c.id, canal: c.tipo==='Mayorista'?'Mayorista':c.tipo==='Empresa'?'Empresa':c.tipo==='Cuenta corriente'?'Cuenta corriente':'Pedido particular'})); },
+  pedidoParaCliente: () => { const c=SH.draft; if(c.tipo==='Mayorista'){ openSheet('pedMay', nuevoPedido({clienteNombre:c.nombre, clienteId:c.id, canal:'Mayorista', remito: proxRemito(), iva:false})); return; } openSheet('pedido', nuevoPedido({clienteNombre:c.nombre, telefono:c.telefono||'', clienteId:c.id, canal: c.tipo==='Cuenta corriente'?'Cuenta corriente':'WhatsApp'})); },
   nuevaReceta: () => openSheet('receta', {nombre:'', rinde:'', unidadRinde:'unidades', minutos:'', extra:'', ingredientes:[], notas:''}),
   editReceta: el => { const r=S.recetas[el.dataset.id]; if(r) openSheet('receta', clone(r)); },
   addIng: el => { SH.draft.ingredientes = SH.draft.ingredientes||[]; SH.draft.ingredientes.push({insumoId:el.dataset.id, cant:''}); SH.q=''; renderSheet(); const i=SH.draft.ingredientes.length-1; const inp=document.getElementById('ing-'+i); if(inp) inp.focus(); },
@@ -1587,6 +1599,8 @@ document.addEventListener('input', ev => {
   if(el.dataset.bind){ U[el.dataset.bind] = el.value; render(); return; }
   if(!SH) return;
   const d = SH.draft;
+  if(el.dataset.d==='telefono'){ d.telefono = el.value; const c = clientePorTel(el.value); if(c && SH.type!=='cliente'){ if(!d.clienteNombre || d._autoNom){ d.clienteNombre = c.nombre; d.clienteId = c.id; d._autoNom = true; } renderSheetSoft(); } return; }
+  if(el.dataset.d==='clienteNombre'){ d._autoNom = false; }
   if(el.dataset.d){ setPath(d, el.dataset.d, el.value); if(['descuento','envio','invitados','precio','presentacion','unidad','recetaId','factor','packaging','minutos','rinde','extra','pct','redondeo','cat','canal','ingreso','egreso','tarifa','neto','iva','percepciones'].includes(el.dataset.d) && el.tagName!=='TEXTAREA') renderSheetSoft(); return; }
   if(el.dataset.it!=null){ d.items[+el.dataset.it][el.dataset.k] = el.value; renderSheetSoft(); return; }
   if(el.dataset.pg!=null){ d.pagos[+el.dataset.pg][el.dataset.k] = el.value; renderSheetSoft(); return; }
