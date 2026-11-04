@@ -1615,7 +1615,7 @@ const A = {
   savePedido: async () => { const d=SH.draft; const esVenta=!!SH.venta;
     if(!(d.items||[]).length){ toast('Agregá al menos un producto'); return; }
     if(d.canal==='Mayorista' && !(d.clienteNombre||'').trim()){ toast('Elegí el cliente'); return; }
-    if(d.canal==='Mayorista' && d.remito && pedidosArr().some(p=>p.id!==d.id && p.canal==='Mayorista' && String(p.remito)===String(d.remito).trim() && norm(p.clienteNombre)===norm(d.clienteNombre) && (p.entrega||'').slice(0,4)===(d.entrega||'').slice(0,4))){ toast('Ya hay un pedido de '+d.clienteNombre+' con el remito N° '+d.remito); return; }
+    if(d.canal==='Mayorista' && d.remito && pedidosArr().some(p=>p.id!==d.id && p.canal==='Mayorista' && String(p.remito)===String(d.remito).trim())){ const o=pedidosArr().find(p=>p.id!==d.id && p.canal==='Mayorista' && String(p.remito)===String(d.remito).trim()); toast('El remito N° '+d.remito+' ya está usado en un pedido de '+(o.clienteNombre||'otro cliente')); return; }
     if(SH.venta && !(d.pagos||[]).length){ d.pagos=[{f:d.entrega||today(), monto: totPedido(d).aCobrar, medio:'Efectivo'}]; }
     delete d._autoNom; if(d.clienteNombre && d.clienteNombre!=='Mostrador') d.clienteId = findOrCreateCliente(d);
     closeSheet(); await save('pedidos', d); toast(esVenta?'Venta registrada':'Pedido guardado'); },
