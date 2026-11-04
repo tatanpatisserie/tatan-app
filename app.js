@@ -537,7 +537,7 @@ R.presupuestos = function(){
   return `<div class="stack">
     <div class="row between"><h1>Presupuestos</h1><button class="btn pri sm" data-act="nuevoPresu">${svg('plus')}Nuevo</button></div>
     <p class="muted" style="margin:0">Armá el presupuesto con tu lista de precios, mandalo y, cuando lo confirman, pasalo a pedido con un toque.</p>
-    ${arr.length ? '<div class="list">'+arr.map(p=>{ const e=estadoPresu(p); const t=sum(p.items||[],l=>num(l.cant)*num(l.precio))-num(p.descuento);
+    ${arr.length ? '<div class="list">'+arr.map(p=>{ const e=estadoPresu(p); const t=totPedido(p).aCobrar;
       return '<button class="item" data-act="editPresu" data-id="'+p.id+'"><div class="datechip"><span>N°</span><b>'+pad(p.numero||0)+'</b></div><div class="main"><span class="t">'+esc(p.clienteNombre||'Sin cliente')+'</span><span class="s">'+esc(p.evento||'')+(p.fechaEvento?' · '+fdate(p.fechaEvento):'')+(p.invitados?' · '+p.invitados+' invitados':'')+'</span><span><span class="pill '+e[1]+'">'+e[0]+'</span></span></div><div class="end"><span class="num" style="font-weight:700">'+$(t)+'</span></div></button>'; }).join('')+'</div>'
       : '<div class="card empty"><h2>Todavía no hay presupuestos</h2><button class="btn pri" data-act="nuevoPresu">Armar el primero</button></div>'}
   </div>`;
@@ -907,22 +907,26 @@ function copy(text){
 }
 function fallbackCopy(text){ openSheet('texto', {text}); }
 
-const SHEETS = {};
-SHEETS.pedido = function(){
-  const d = SH.draft; const t = totPedido(d); const n = neg();
-  const costo = sum(d.items||[], l=>lineaCosto(l).costo);
+/* Bloque común de pedido minorista y presupuesto: WhatsApp, productos, descuento, envío, pagos, totales y notas */
+function bloquePedido(d, o){
+  const t = totPedido(d); const costo = sum(d.items||[], l=>lineaCosto(l).costo);
   const pays = (d.pagos||[]).map((x,i)=>'<div class="pay"><input class="f pf" id="pg-f-'+i+'" type="date" data-pg="'+i+'" data-k="f" value="'+esc(x.f)+'" aria-label="Fecha"><input class="f num" id="pg-m-'+i+'" type="number" inputmode="decimal" step="any" data-pg="'+i+'" data-k="monto" value="'+esc(x.monto)+'" aria-label="Monto"><select class="f" id="pg-x-'+i+'" data-pg="'+i+'" data-k="medio" aria-label="Medio">'+MEDIOS.map(m=>'<option'+(x.medio===m?' selected':'')+'>'+m+'</option>').join('')+'</select><button class="rm" data-act="rmPago" data-i="'+i+'" aria-label="Quitar pago" style="border:0;background:none;font-size:18px;color:var(--muted);cursor:pointer">×</button></div>').join('');
-  const body = clienteFields(d)+
-    '<div class="grid3">'+sel('canal','Canal',d.canal,(CANALES_MIN.includes(d.canal)||d.canal==='Fecha especial'&&false)?CANALES_MIN:CANALES_MIN.concat(d.canal?[d.canal]:[]))+fld('entrega','Fecha de entrega',d.entrega,'date')+fld('hora','Hora',d.hora,'time')+'</div>'+
-    sel('estado','Estado',d.estado,Object.entries(ESTADOS).map(([k,v])=>[k,v[0]]))+
-    machete(d)+
+  return machete(d)+
     itemsEditor(d.items||[])+
     '<div class="stack" style="gap:6px"><span class="lb" style="margin:0">Descuento</span><div class="subtabs">'+[0,10,15,20].map(v=>'<button data-act="pedDesc" data-v="'+v+'" aria-pressed="'+(num(d.descPct)===v && !(v===0 && num(d.descuento)))+'">'+(v?v+'%':'Sin descuento')+'</button>').join('')+'</div></div>'+
     '<div class="grid2">'+(num(d.descPct)?'<div class="tile"><span class="k">Descuento '+num(d.descPct)+'%</span><span class="v num" style="font-size:18px">−'+$(t.desc)+'</span></div>':fld('descuento','Otro descuento ($)',d.descuento||'','number'))+fld('envio','Envío ($, va aparte)',d.envio||'','number')+'</div>'+
     '<div class="stack" style="gap:8px"><div class="row between"><h3>Pagos y señas</h3><div class="row"><button class="btn sm" data-act="addPago" data-tipo="sena">Seña 50%</button><button class="btn sm" data-act="addPago" data-tipo="saldo">Saldo completo</button><button class="btn sm ghost" data-act="addPago" data-tipo="otro">+ Pago</button></div></div><div class="pays">'+(pays||'<div class="muted" style="font-size:13px">Sin pagos registrados.</div>')+'</div></div>'+
     '<div class="totals num"><div class="r"><span>Productos</span><span>'+$(t.sub)+'</span></div>'+(t.desc?'<div class="r"><span>Descuento'+(num(d.descPct)?' '+num(d.descPct)+'%':'')+'</span><span>−'+$(t.desc)+'</span></div>':'')+(t.envio?'<div class="r"><span>Envío</span><span>'+$(t.envio)+'</span></div>':'')+'<div class="r big"><span>Total a cobrar</span><span>'+$(t.aCobrar)+'</span></div><div class="r"><span>Pagado</span><span>'+$(t.pagado)+'</span></div><div class="r" style="font-weight:700;color:'+(t.saldo>0.5?'var(--bad)':'var(--ok)')+'"><span>Saldo</span><span>'+$(t.saldo)+'</span></div>'+
-    (verPlata()?'<div class="r muted" style="font-size:12.5px;border-top:1px dashed var(--line);padding-top:6px;margin-top:3px"><span>Costo estimado · ganancia del pedido</span><span>'+$(costo)+' · '+$(t.total-costo)+'</span></div>':'')+'</div>'+
-    '<label class="lb">Notas (sabores, deco, dirección de entrega)<textarea class="f" id="d-notas" data-d="notas">'+esc(d.notas||'')+'</textarea></label>'+
+    (verPlata()?'<div class="r muted" style="font-size:12.5px;border-top:1px dashed var(--line);padding-top:6px;margin-top:3px"><span>Costo estimado · ganancia del pedido</span><span>'+$(costo)+' · '+$(t.total-costo)+'</span></div>':'')+(o.extraTot||'')+'</div>'+
+    '<label class="lb">'+o.notasLbl+'<textarea class="f" id="d-'+o.notas+'" data-d="'+o.notas+'">'+esc(d[o.notas]||'')+'</textarea></label>';
+}
+const SHEETS = {};
+SHEETS.pedido = function(){
+  const d = SH.draft; const n = neg();
+  const body = clienteFields(d)+
+    '<div class="grid3">'+sel('canal','Canal',d.canal,(CANALES_MIN.includes(d.canal)||d.canal==='Fecha especial'&&false)?CANALES_MIN:CANALES_MIN.concat(d.canal?[d.canal]:[]))+fld('entrega','Fecha de entrega',d.entrega,'date')+fld('hora','Hora',d.hora,'time')+'</div>'+
+    sel('estado','Estado',d.estado,Object.entries(ESTADOS).map(([k,v])=>[k,v[0]]))+
+    bloquePedido(d, {notas:'notas', notasLbl:'Notas (sabores, deco, dirección de entrega)'})+
     delBlock('este pedido');
   const wa = waLink(d.telefono, resumenPedido(d));
   const foot = (d.id?'<button class="btn danger sm" data-act="delAsk">Borrar</button><button class="btn sm" data-act="dupPedido">Duplicar</button>':'')+'<button class="btn sm" data-act="copyPedido">Copiar resumen</button>'+(wa?'<a class="btn sm" href="'+esc(wa)+'" target="_blank" rel="noopener">WhatsApp</a>':'')+'<span class="grow"></span><button class="btn pri" data-act="savePedido" '+(readOnly?'disabled':'')+'>Guardar</button>';
@@ -966,33 +970,30 @@ function resumenPedido(d){
     t.desc?'Descuento'+(num(d.descPct)?' '+num(d.descPct)+'%':'')+': −'+$(t.desc):'', t.iva?'Subtotal: '+$(t.total):'', t.iva?'IVA '+IVA_PCT+'%: '+$(t.iva):'', t.envio?'Envío: '+$(t.envio):'', 'Total'+(d.canal==='Mayorista'?(d.iva?' con IVA':' sin IVA'):'')+': '+$(t.aCobrar), t.pagado?'Pagado: '+$(t.pagado):'', t.pagado&&t.saldo>0.5?'Saldo a abonar: '+$(t.saldo):'', d.notas?'\nNotas: '+d.notas:''].filter(x=>x!=='').join('\n').replace(/\n\n+/g,'\n\n');
 }
 SHEETS.presu = function(){
-  const d = SH.draft; const sub = sum(d.items||[],l=>num(l.cant)*num(l.precio)); const total = sub-num(d.descuento);
+  const d = SH.draft;
   const bocados = d.invitados? sum((d.items||[]).filter(l=>{ const p=l.pid&&prodById(l.pid); return p && p.cat==='Eventos'; }), l=>num(l.cant))/num(d.invitados) : 0;
   const body = clienteFields(d)+
     '<div class="grid2">'+fld('evento','Evento / ocasión',d.evento)+fld('invitados','Invitados',d.invitados||'','number')+'</div>'+
     '<div class="grid3">'+fld('fechaEvento','Fecha del evento',d.fechaEvento,'date')+fld('emision','Emitido',d.emision,'date')+fld('validoHasta','Válido hasta',d.validoHasta,'date')+'</div>'+
     sel('estado','Estado',d.estado||'enviado',[['enviado','Enviado'],['aceptado','Aceptado'],['rechazado','Rechazado']])+
-    itemsEditor(d.items||[])+
-    fld('descuento','Descuento ($)',d.descuento||'','number')+
-    '<div class="totals num"><div class="r"><span>Subtotal</span><span>'+$(sub)+'</span></div>'+(num(d.descuento)?'<div class="r"><span>Descuento</span><span>−'+$(num(d.descuento))+'</span></div>':'')+'<div class="r big"><span>Total</span><span>'+$(total)+'</span></div>'+(d.invitados?'<div class="r muted" style="font-size:12.5px"><span>Por invitado</span><span>'+$(total/num(d.invitados))+(bocados?' · '+(Math.round(bocados*10)/10).toLocaleString('es-AR')+' bocados de evento c/u':'')+'</span></div>':'')+'</div>'+
-    '<label class="lb">Observaciones<textarea class="f" id="d-obs" data-d="obs">'+esc(d.obs||'')+'</textarea></label>'+
+    bloquePedido(d, {notas:'obs', notasLbl:'Observaciones (salen en el presupuesto)', extraTot: d.invitados?'<div class="r muted" style="font-size:12.5px"><span>Por invitado</span><span>'+$(totPedido(d).total/num(d.invitados))+(bocados?' · '+(Math.round(bocados*10)/10).toLocaleString('es-AR')+' bocados de evento c/u':'')+'</span></div>':''})+
     (d.pedidoId?'<div class="note">Ya se pasó a pedido. <button class="btn sm" data-act="abrirPedido" data-id="'+esc(d.pedidoId)+'">Ver pedido</button></div>':'')+
     delBlock('este presupuesto');
   const foot = (d.id?'<button class="btn danger sm" data-act="delAsk">Borrar</button>':'')+'<button class="btn sm" data-act="verDoc">Ver presupuesto</button>'+(d.pedidoId?'':'<button class="btn sm" data-act="presuAPedido">Pasar a pedido</button>')+'<span class="grow"></span><button class="btn pri" data-act="savePresu" '+(readOnly?'disabled':'')+'>Guardar</button>';
   return { title: 'Presupuesto N° '+pad(d.numero||0), body, foot };
 };
 function textoPresu(d){
-  const n = neg(); const total = sum(d.items||[],l=>num(l.cant)*num(l.precio))-num(d.descuento);
-  return [n.nombre+' '+(n.subtitulo||'')+' · Presupuesto N° '+pad(d.numero||0), d.clienteNombre?'Cliente: '+d.clienteNombre:'', d.evento?'Evento: '+d.evento+(d.invitados?' ('+d.invitados+' invitados)':''):'', d.fechaEvento?'Fecha del evento: '+fdate(d.fechaEvento):'', '',
+  const n = neg(); const t = totPedido(d);
+  return [n.nombre+' · Presupuesto N° '+pad(d.numero||0), d.clienteNombre?'Cliente: '+d.clienteNombre:'', d.evento?'Evento: '+d.evento+(d.invitados?' ('+d.invitados+' invitados)':''):'', d.fechaEvento?'Fecha del evento: '+fdate(d.fechaEvento):'', '',
     ...(d.items||[]).map(l=>'• '+l.cant+' × '+l.nombre+' ('+$(l.precio)+' c/u) — '+$(num(l.cant)*num(l.precio))),
-    num(d.descuento)?'Descuento: −'+$(num(d.descuento)):'', '', 'TOTAL: '+$(total), d.validoHasta?'Válido hasta el '+fdate(d.validoHasta):'', d.obs||''].filter((x,i,a)=>!(x===''&&a[i-1]==='')).join('\n');
+    t.desc?'Descuento'+(num(d.descPct)?' '+num(d.descPct)+'%':'')+': −'+$(t.desc):'', t.envio?'Envío: '+$(t.envio):'', '', 'TOTAL: '+$(t.aCobrar), t.pagado?'Seña recibida: '+$(t.pagado):'', t.pagado&&t.saldo>0.5?'Saldo: '+$(t.saldo):'', d.validoHasta?'Válido hasta el '+fdate(d.validoHasta):'', d.obs||''].filter((x,i,a)=>!(x===''&&a[i-1]==='')).join('\n');
 }
 SHEETS.doc = function(){
-  const d = SH.draft; const n = neg(); const total = sum(d.items||[],l=>num(l.cant)*num(l.precio))-num(d.descuento);
+  const d = SH.draft; const n = neg(); const t = totPedido(d);
   const body = '<div class="doc"><div class="dh"><div class="dn"><img src="logo-tatan.png" alt="'+esc(n.nombre||'Tatan')+'"></div><div class="dt"><b>Presupuesto</b>N° '+pad(d.numero||0)+'<br>Emitido '+fdate(d.emision)+'</div></div>'+
     '<div class="meta"><div><span>Cliente</span>'+esc(d.clienteNombre||'—')+'</div><div><span>Contacto</span>'+esc(d.telefono||'—')+'</div><div><span>Evento</span>'+esc(d.evento||'—')+'</div><div><span>Fecha del evento</span>'+fdate(d.fechaEvento)+'</div><div><span>Invitados</span>'+esc(d.invitados||'—')+'</div><div><span>Válido hasta</span>'+fdate(d.validoHasta)+'</div></div>'+
-    '<table><thead><tr><th>Producto</th><th class="r">Cant.</th><th class="r">Unitario</th><th class="r">Total</th></tr></thead><tbody>'+(d.items||[]).map(l=>'<tr><td>'+esc(l.nombre)+'</td><td class="r">'+esc(l.cant)+'</td><td class="r">'+$(l.precio)+'</td><td class="r">'+$(num(l.cant)*num(l.precio))+'</td></tr>').join('')+(num(d.descuento)?'<tr><td colspan="3">Descuento</td><td class="r">−'+$(num(d.descuento))+'</td></tr>':'')+'</tbody></table>'+
-    '<div class="tot"><span>Total</span><span>'+$(total)+'</span></div>'+(d.obs?'<div class="obs">'+esc(d.obs)+'</div>':'')+
+    '<table><thead><tr><th>Producto</th><th class="r">Cant.</th><th class="r">Unitario</th><th class="r">Total</th></tr></thead><tbody>'+(d.items||[]).map(l=>'<tr><td>'+esc(l.nombre)+'</td><td class="r">'+esc(l.cant)+'</td><td class="r">'+$(l.precio)+'</td><td class="r">'+$(num(l.cant)*num(l.precio))+'</td></tr>').join('')+(t.desc?'<tr><td colspan="3">Descuento'+(num(d.descPct)?' '+num(d.descPct)+'%':'')+'</td><td class="r">−'+$(t.desc)+'</td></tr>':'')+(t.envio?'<tr><td colspan="3">Envío</td><td class="r">'+$(t.envio)+'</td></tr>':'')+'</tbody></table>'+
+    '<div class="tot"><span>Total</span><span>'+$(t.aCobrar)+'</span></div>'+(t.pagado?'<div class="obs" style="text-align:right;margin-top:4px">Seña recibida '+$(t.pagado)+' · Saldo '+$(t.saldo)+'</div>':'')+(d.obs?'<div class="obs">'+esc(d.obs)+'</div>':'')+
     '<div class="foot">¡Gracias por elegirnos! · '+[n.telefono,n.instagram,n.direccion].filter(Boolean).map(esc).join(' · ')+'</div></div><p class="muted" style="font-size:12.5px;margin:0">Descargalo como imagen para mandárselo al cliente.</p>';
   return { title:'Presupuesto para enviar', body, foot:'<button class="btn sm" data-act="backPresu">‹ Volver</button><span class="grow"></span><button class="btn sm" data-act="copyPresu">Copiar texto</button><button class="btn pri sm" data-act="jpgPresu">Descargar JPG</button>'+(waLink(d.telefono,'x')?'<a class="btn pri sm" target="_blank" rel="noopener" href="'+esc(waLink(d.telefono,textoPresu(d)))+'">Enviar por WhatsApp</a>':'') };
 };
@@ -1000,7 +1001,8 @@ SHEETS.doc = function(){
 let LOGO_IMG = null;
 function cargarLogo(){ return LOGO_IMG ? Promise.resolve(LOGO_IMG) : new Promise(res=>{ const i=new Image(); i.onload=()=>{LOGO_IMG=i;res(i);}; i.onerror=()=>res(null); i.src='logo-tatan.png'; }); }
 async function presuJPG(d){
-  const n = neg(); const total = sum(d.items||[],l=>num(l.cant)*num(l.precio))-num(d.descuento);
+  const n = neg(); const tp = totPedido(d); const total = tp.aCobrar;
+  const extras = [tp.desc?['Descuento'+(num(d.descPct)?' '+num(d.descPct)+'%':''),'−'+$(tp.desc)]:null, tp.envio?['Envío',$(tp.envio)]:null].filter(Boolean);
   try{ await Promise.all(['400 20px Nunito','700 20px Nunito','800 20px Nunito','400 20px Doughy'].map(f=>document.fonts.load(f))); }catch(e){}
   const logo = await cargarLogo();
   const W=1080, M=72, V='#703260', B='#FCEFD9', INK='#241B1F', MU='#7A6F74', LN='#E6E1DD';
@@ -1010,7 +1012,7 @@ async function presuJPG(d){
   // Medir alto
   const colP=W-2*M-500; const filas=(d.items||[]).map(l=>({l, lines:wrap(l.nombre,colP,F(400,28))}));
   const obsL = d.obs? wrap(d.obs,W-2*M,F(400,26)) : [];
-  let H = M+150+40+ 3*86 + 30 + 60 + filas.reduce((a,f)=>a+f.lines.length*38+26,0) + (num(d.descuento)?64:0) + 40 + 110 + (obsL.length? obsL.length*36+40:0) + 150;
+  let H = M+150+40+ 3*86 + 30 + 60 + filas.reduce((a,f)=>a+f.lines.length*38+26,0) + extras.length*64 + (tp.pagado?50:0) + 40 + 110 + (obsL.length? obsL.length*36+40:0) + 150;
   c.width=W; c.height=H;
   x.fillStyle='#FFFFFF'; x.fillRect(0,0,W,H);
   x.fillStyle=V; x.fillRect(0,0,W,14);
@@ -1033,12 +1035,13 @@ async function presuJPG(d){
   filas.forEach(f=>{ const l=f.l; let yy=y+14; x.fillStyle=INK; x.font=F(400,28); f.lines.forEach(t=>{ x.fillText(t,M+20,yy); yy+=38; });
     x.textAlign='right'; x.font=F(600,28); x.fillText(String(l.cant||''),cC,y+14); x.fillText($(l.precio),cU,y+14); x.font=F(700,28); x.fillText($(num(l.cant)*num(l.precio)),cT,y+14); x.textAlign='left';
     y += f.lines.length*38+26; x.fillStyle=LN; x.fillRect(M,y-6,W-2*M,2); });
-  if(num(d.descuento)){ x.fillStyle=INK; x.font=F(600,28); x.fillText('Descuento',M+20,y+14); x.textAlign='right'; x.fillText('−'+$(num(d.descuento)),cT,y+14); x.textAlign='left'; y+=64; }
+  extras.forEach(e=>{ x.fillStyle=INK; x.font=F(600,28); x.fillText(e[0],M+20,y+14); x.textAlign='right'; x.fillText(e[1],cT,y+14); x.textAlign='left'; y+=64; });
   y+=40;
   // Total
   const tw=520, th=90; x.fillStyle=V; x.beginPath(); x.roundRect? x.roundRect(W-M-tw,y,tw,th,45) : x.rect(W-M-tw,y,tw,th); x.fill();
   x.fillStyle=B; x.textBaseline='middle'; x.font=F(700,30); x.fillText('Total',W-M-tw+40,y+th/2); x.textAlign='right'; x.font=F(800,42); x.fillText($(total),W-M-40,y+th/2); x.textAlign='left'; x.textBaseline='top';
   y+=th+20;
+  if(tp.pagado){ x.textAlign='right'; x.fillStyle=MU; x.font=F(600,24); x.fillText('Seña recibida '+$(tp.pagado)+'  ·  Saldo '+$(tp.saldo),W-M,y); x.textAlign='left'; y+=50; }
   if(obsL.length){ y+=20; x.fillStyle='#5E5458'; x.font=F(400,26); obsL.forEach(t=>{ x.fillText(t,M,y); y+=36; }); }
   // Pie
   const fy=H-110; x.fillStyle=LN; x.fillRect(M,fy,W-2*M,2);
@@ -1691,7 +1694,7 @@ const A = {
   jpgPresu: () => bajarPresuJPG(SH.draft),
   presuAPedido: async () => { const d=SH.draft; if(!(d.items||[]).length){ toast('El presupuesto no tiene productos'); return; }
     if(d.clienteNombre) d.clienteId=findOrCreateCliente(d);
-    const pid = await save('pedidos', nuevoPedido({clienteNombre:d.clienteNombre, clienteId:d.clienteId||'', telefono:d.telefono, canal:'Evento', entrega:d.fechaEvento||today(), items:clone(d.items), descuento:d.descuento, notas:[d.evento, d.invitados?d.invitados+' invitados':'', 'Presupuesto N° '+pad(d.numero)].filter(Boolean).join(' · '), presupuestoId:d.id||''}));
+    const pid = await save('pedidos', nuevoPedido({clienteNombre:d.clienteNombre, clienteId:d.clienteId||'', telefono:d.telefono, canal:'Evento', entrega:d.fechaEvento||today(), items:clone(d.items), descuento:d.descuento, descPct:d.descPct||'', envio:d.envio||'', pagos:clone(d.pagos||[]), mensaje:d.mensaje||'', notas:[d.evento, d.invitados?d.invitados+' invitados':'', 'Presupuesto N° '+pad(d.numero)].filter(Boolean).join(' · '), presupuestoId:d.id||''}));
     d.estado='aceptado'; d.pedidoId=pid; const id = await save('presupuestos', d);
     const n=neg(); if(num(d.numero)>=num(n.proxPresupuesto)) saveDoc('negocio', Object.assign({}, S.negocio, {proxPresupuesto:num(d.numero)+1}));
     openSheet('pedido', clone(S.pedidos[pid])); toast('Pasado a pedido. Cargá la seña.'); },
