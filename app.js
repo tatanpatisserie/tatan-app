@@ -941,7 +941,7 @@ SHEETS.pedMay = function(){
   const cli = '<datalist id="dl-climay">'+clientesMay().map(c=>'<option value="'+esc(c.nombre)+'">').join('')+'</datalist>';
   const lineas = (d.items||[]).map((l,i)=>'<div class="line may"><input class="f num" id="it-c-'+i+'" data-it="'+i+'" data-k="cant" type="number" inputmode="decimal" step="any" value="'+esc(l.cant)+'" aria-label="Cantidad"><div class="nm">'+esc(l.nombre)+(l.pid?'':'<small>ítem libre</small>')+'</div><input class="f num" id="it-p-'+i+'" data-it="'+i+'" data-k="precio" type="number" inputmode="decimal" step="any" value="'+esc(l.precio)+'" aria-label="Valor unitario"><span class="num imp">'+$(num(l.cant)*num(l.precio))+'</span><button class="rm" data-act="rmItem" data-i="'+i+'" aria-label="Quitar">×</button></div>').join('');
   const body = cli+
-    '<div class="grid2">'+fld('clienteNombre','Cliente',d.clienteNombre,'text','list="dl-climay" autocomplete="off" placeholder="Elegí o escribí el cliente"')+fld('remito','N° de remito',d.remito||'','text','inputmode="numeric"')+'</div>'+
+    '<div class="grid2">'+fld('clienteNombre','Cliente',d.clienteNombre,'text','list="dl-climay" autocomplete="off" placeholder="Elegí o escribí el cliente"')+fld('remito','N° de remito',d.remito||'','text','inputmode="numeric" placeholder="Completalo cuando hagas el remito"')+'</div>'+
     '<div class="grid3">'+fld('entrega','Fecha de entrega',d.entrega,'date')+fld('factura','N° de factura (opcional)',d.factura||'','text','inputmode="numeric"')+sel('estado','Estado',d.estado,Object.entries(ESTADOS).map(([k,v])=>[k,v[0]]))+'</div>'+
     '<div class="stack" style="gap:6px"><span class="lb" style="margin:0">IVA</span><div class="subtabs"><button data-act="pedIva" data-v="0" aria-pressed="'+(!d.iva)+'">Sin IVA</button><button data-act="pedIva" data-v="1" aria-pressed="'+(!!d.iva)+'">Con IVA (+'+IVA_PCT+'%)</button></div></div>'+
     machete(d)+
@@ -1582,7 +1582,7 @@ const A = {
     else remove(map[t], SH.draft.id);
     closeSheet(); toast('Borrado'); },
   nuevoPedido: () => openSheet('pedido', nuevoPedido({canal:'WhatsApp'})),
-  nuevoMay: () => openSheet('pedMay', nuevoPedido({canal:'Mayorista', remito: proxRemito(), iva:false, entrega: today()})),
+  nuevoMay: () => openSheet('pedMay', nuevoPedido({canal:'Mayorista', remito:'', iva:false, entrega: today()})),
   pedTipo: el => { U.pedTipo = el.dataset.v; U.pedLim = 120; render(); },
   verCuentas: () => { U.fCli='Cuenta corriente'; U.q=''; location.hash='#clientes'; },
   fCli: el => { U.fCli = el.dataset.v; U.cliLim = 200; render(); },
@@ -1603,7 +1603,7 @@ const A = {
   ventaLocal: () => openSheet('pedido', nuevoPedido({canal:'Local', estado:'entregado', clienteNombre:'Mostrador'}), {venta:true}),
   editPedido: el => { const p=S.pedidos[el.dataset.id]; if(p) openSheet(p.canal==='Mayorista'?'pedMay':'pedido', clone(p)); },
   abrirPedido: el => { const p=S.pedidos[el.dataset.id]; if(p) openSheet(p.canal==='Mayorista'?'pedMay':'pedido', clone(p)); },
-  dupPedido: () => { const d=clone(SH.draft); delete d.id; d.pagos=[]; d.estado='pendiente'; d.entrega=today(); delete d.origen; if(d.canal==='Mayorista'){ d.remito=proxRemito(); d.factura=''; } openSheet(d.canal==='Mayorista'?'pedMay':'pedido', d); toast('Copia lista para editar'); },
+  dupPedido: () => { const d=clone(SH.draft); delete d.id; d.pagos=[]; d.estado='pendiente'; d.entrega=today(); delete d.origen; if(d.canal==='Mayorista'){ d.remito=''; d.factura=''; } openSheet(d.canal==='Mayorista'?'pedMay':'pedido', d); toast('Copia lista para editar'); },
   addItem: el => { const p=prodById(el.dataset.pid); if(!p) return; const it=SH.draft.items; const ex=it.find(l=>l.pid===p.id); if(ex) ex.cant=num(ex.cant)+1; else it.push({pid:p.id, nombre:p.nombre, cant:1, precio:(SH.draft.canal==='Mayorista' && p.precioMay) ? p.precioMay : (p.precio||0)}); SH.q=''; SH.sel=0; renderSheet(); const q=document.getElementById('itq'); if(q) q.focus(); },
   addFree: () => { SH.draft.items.push({pid:'', nombre:SH.q.trim(), cant:1, precio:0}); SH.q=''; SH.sel=0; renderSheet(); const q=document.getElementById('itq'); if(q) q.focus(); },
   rmItem: el => { SH.draft.items.splice(+el.dataset.i,1); renderSheet(); },
@@ -1615,7 +1615,7 @@ const A = {
   savePedido: async () => { const d=SH.draft; const esVenta=!!SH.venta;
     if(!(d.items||[]).length){ toast('Agregá al menos un producto'); return; }
     if(d.canal==='Mayorista' && !(d.clienteNombre||'').trim()){ toast('Elegí el cliente'); return; }
-    if(d.canal==='Mayorista' && d.remito && pedidosArr().some(p=>p.id!==d.id && p.canal==='Mayorista' && String(p.remito)===String(d.remito).trim() && (p.entrega||'').slice(0,4)===(d.entrega||'').slice(0,4))){ toast('Ya hay un pedido con el remito N° '+d.remito); return; }
+    if(d.canal==='Mayorista' && d.remito && pedidosArr().some(p=>p.id!==d.id && p.canal==='Mayorista' && String(p.remito)===String(d.remito).trim() && norm(p.clienteNombre)===norm(d.clienteNombre) && (p.entrega||'').slice(0,4)===(d.entrega||'').slice(0,4))){ toast('Ya hay un pedido de '+d.clienteNombre+' con el remito N° '+d.remito); return; }
     if(SH.venta && !(d.pagos||[]).length){ d.pagos=[{f:d.entrega||today(), monto: totPedido(d).aCobrar, medio:'Efectivo'}]; }
     delete d._autoNom; if(d.clienteNombre && d.clienteNombre!=='Mostrador') d.clienteId = findOrCreateCliente(d);
     closeSheet(); await save('pedidos', d); toast(esVenta?'Venta registrada':'Pedido guardado'); },
@@ -1642,7 +1642,7 @@ const A = {
   nuevoCliente: () => openSheet('cliente', {nombre:'', telefono:'', tipo:'Particular', notas:''}),
   verCliente: el => { const c=S.clientes[el.dataset.id]; if(c) openSheet('cliente', clone(c)); },
   saveCliente: () => { const d=SH.draft; if(!(d.nombre||'').trim()){ toast('Poné el nombre'); return; } save('clientes', d); closeSheet(); toast('Cliente guardado'); },
-  pedidoParaCliente: () => { const c=SH.draft; if(c.tipo==='Mayorista'){ openSheet('pedMay', nuevoPedido({clienteNombre:c.nombre, clienteId:c.id, canal:'Mayorista', remito: proxRemito(), iva:false})); return; } openSheet('pedido', nuevoPedido({clienteNombre:c.nombre, telefono:c.telefono||'', clienteId:c.id, canal: c.tipo==='Cuenta corriente'?'Cuenta corriente':'WhatsApp'})); },
+  pedidoParaCliente: () => { const c=SH.draft; if(c.tipo==='Mayorista'){ openSheet('pedMay', nuevoPedido({clienteNombre:c.nombre, clienteId:c.id, canal:'Mayorista', remito:'', iva:false})); return; } openSheet('pedido', nuevoPedido({clienteNombre:c.nombre, telefono:c.telefono||'', clienteId:c.id, canal: c.tipo==='Cuenta corriente'?'Cuenta corriente':'WhatsApp'})); },
   nuevaReceta: () => openSheet('receta', {nombre:'', rinde:'', unidadRinde:'unidades', minutos:'', extra:'', ingredientes:[], notas:''}),
   editReceta: el => { const r=S.recetas[el.dataset.id]; if(r) openSheet('receta', clone(r)); },
   addIng: el => { SH.draft.ingredientes = SH.draft.ingredientes||[]; SH.draft.ingredientes.push({insumoId:el.dataset.id, cant:''}); SH.q=''; renderSheet(); const i=SH.draft.ingredientes.length-1; const inp=document.getElementById('ing-'+i); if(inp) inp.focus(); },
