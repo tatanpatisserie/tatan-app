@@ -684,6 +684,15 @@ R.clientes = function(){
       : '<div class="card empty"><p>No hay clientes acá. Se crean solos cuando cargás un pedido con un teléfono o nombre nuevo.</p></div>'}
   </div>`;
 };
+/* Doughy no trae tildes, ñ, ü, ¿, guion, % ni + : esas palabras se muestran enteras en Nunito */
+const SIN_DOUGHY = /[^\x20-\x7E¡’…€]|[-%+\/]/;
+
+function arreglarDoughy(root){
+  // Si el título tiene alguna palabra con tilde, va entero en Nunito, así no se mezclan las dos letras.
+  (root||document).querySelectorAll('h1, h2, .hero .big').forEach(el=>{ const t=SIN_DOUGHY.test(el.textContent); if(t!==el.classList.contains('nd')) el.classList.toggle('nd', t); });
+}
+let _ndPend=false;
+new MutationObserver(()=>{ if(_ndPend) return; _ndPend=true; requestAnimationFrame(()=>{ _ndPend=false; arreglarDoughy(document); }); }).observe(document.documentElement, {childList:true, subtree:true, characterData:true});
 /* ===== ESTADÍSTICAS ===== */
 function canalStat(p){ if(p.canal==='Mayorista') return 'Mayoristas'; if(p.canal==='Fecha especial') return 'Fecha especial'; if(p.origen==='bistrosoft') return 'Mostrador (Bistrosoft)';
   if(p.canal==='Local') return 'Local'; if(p.canal==='WhatsApp') return 'WhatsApp'; if(p.canal==='Cuenta corriente') return 'Cuenta corriente'; return 'Pedidos de planilla (sin canal)'; }
