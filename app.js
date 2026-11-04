@@ -168,7 +168,7 @@ function pantallaLogin(msg, registrar){
   document.getElementById('app').hidden = true;
   const L = document.getElementById('login'); L.hidden = false;
   L.innerHTML = '<form class="card" id="loginf" autocomplete="on">'+
-    '<h1>Tatan</h1><p class="muted" style="margin:0">'+(registrar?'Creá tu usuario con el mismo mail con el que te invitaron.':'Entrá con tu usuario del equipo.')+'</p>'+
+    '<img src="logo-tatan.png" alt="Tatan" class="logo"><p class="muted" style="margin:0">'+(registrar?'Creá tu usuario con el mismo mail con el que te invitaron.':'Entrá con tu usuario del equipo.')+'</p>'+
     (registrar?'<label class="lb">Tu nombre<input class="f" name="nombre" required autocomplete="name"></label>':'')+
     '<label class="lb">Mail<input class="f" name="email" type="email" required autocomplete="username" inputmode="email"></label>'+
     '<label class="lb">Contraseña<input class="f" name="pass" type="password" required minlength="8" autocomplete="'+(registrar?'new-password':'current-password')+'"></label>'+
@@ -326,7 +326,7 @@ window.addEventListener('hashchange', route);
 function render(){
   setSync();
   const n = neg();
-  document.getElementById('brand').innerHTML = esc(n.nombre||'Tatan') + '<small>' + esc(n.subtitulo||'Gestión del local') + '</small>';
+  document.getElementById('brand').innerHTML = '<img src="logo-tatan.png" alt="'+esc(n.nombre||'Tatan')+'" class="logo"><small>' + esc(n.subtitulo||'Gestión del local') + '</small>';
   const tabs = TABSETS[SECTOR] || TABSETS.todo;
   const active = tabs.some(t=>t[0]===U.view) ? U.view : (SUBOF[U.view] || U.view);
   document.getElementById('tabs').style.gridTemplateColumns = 'repeat('+tabs.length+',1fr)';
