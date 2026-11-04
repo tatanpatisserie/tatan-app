@@ -684,12 +684,13 @@ R.clientes = function(){
       : '<div class="card empty"><p>No hay clientes acá. Se crean solos cuando cargás un pedido con un teléfono o nombre nuevo.</p></div>'}
   </div>`;
 };
-/* Doughy no trae tildes, ñ, ü, ¿, guion, % ni + : esas palabras se muestran enteras en Nunito */
-const SIN_DOUGHY = /[^\x20-\x7E¡’…€]|[-%+\/]/;
-
+/* Doughy no trae tildes ni ñ: en los títulos se muestran sin tilde (Más → Mas), todo en Doughy */
+const CON_TILDE = /[À-ſ]/;
 function arreglarDoughy(root){
-  // Si el título tiene alguna palabra con tilde, va entero en Nunito, así no se mezclan las dos letras.
-  (root||document).querySelectorAll('h1, h2, .hero .big').forEach(el=>{ const t=SIN_DOUGHY.test(el.textContent); if(t!==el.classList.contains('nd')) el.classList.toggle('nd', t); });
+  (root||document).querySelectorAll('h1, h2, .hero .big').forEach(el=>{
+    const tw = document.createTreeWalker(el, NodeFilter.SHOW_TEXT); let nd;
+    while((nd=tw.nextNode())){ if(CON_TILDE.test(nd.nodeValue)) nd.nodeValue = nd.nodeValue.normalize('NFD').replace(/[̀-ͯ]/g,''); }
+  });
 }
 let _ndPend=false;
 new MutationObserver(()=>{ if(_ndPend) return; _ndPend=true; requestAnimationFrame(()=>{ _ndPend=false; arreglarDoughy(document); }); }).observe(document.documentElement, {childList:true, subtree:true, characterData:true});
