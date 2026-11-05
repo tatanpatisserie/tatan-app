@@ -880,12 +880,14 @@ function buscarProductos(q, modo){
   const lista = (todos.length ? todos : out.filter(x=>x.hit>=Math.max(1,toks.length-1)));
   return lista.sort((a,b)=> b.hit-a.hit || b.enNom-a.enNom || a.pos-b.pos || a.len-b.len || (a.p.nombre||'').localeCompare(b.p.nombre||'')).slice(0,12).map(x=>x.p);
 }
+/* "5 pan dulce" o "5x pan dulce": el número del principio es la cantidad */
+function partirCant(q){ const m = String(q||'').match(/^\s*(\d+(?:[.,]\d+)?)\s*(?:x|×|u|un|unid\.?|unidades)?\s+(.+)$/i); return m ? {cant: num(m[1].replace(',','.')), q: m[2]} : {cant: 1, q: String(q||'')}; }
 function prodResultsHTML(){
-  const q = SH.q||''; if(norm(q).trim().length<2) return '';
+  const pc = partirCant(SH.q); const q = pc.q; if(norm(q).trim().length<2) return '';
   const may = SH.type==='pedMay'; const res = buscarProductos(q, may?'may':'min');
   const sel = Math.min(SH.sel||0, Math.max(0,res.length-1));
-  return (res.length ? '<div class="results" role="listbox">'+res.map((p,i)=>'<button data-act="addItem" data-pid="'+p.id+'" role="option" class="'+(i===sel?'on':'')+'" aria-selected="'+(i===sel)+'"><span>'+esc(p.nombre)+'</span><span class="num muted">'+(may?$(p.precioMay):(p.precio?$(p.precio):'a cotizar'))+'</span></button>').join('')+'</div>' : '<div class="muted" style="font-size:13px">No encontré ese producto en la lista'+(may?' mayorista':'')+'.</div>')+
-    '<button class="btn sm ghost" data-act="addFree">+ Agregar “'+esc(q)+'” como ítem libre</button>';
+  return (res.length ? '<div class="results" role="listbox">'+res.map((p,i)=>'<button data-act="addItem" data-pid="'+p.id+'" role="option" class="'+(i===sel?'on':'')+'" aria-selected="'+(i===sel)+'"><span>'+(pc.cant!==1?'<b>'+pc.cant.toLocaleString('es-AR')+' × </b>':'')+esc(p.nombre)+'</span><span class="num muted">'+(may?$(p.precioMay):(p.precio?$(p.precio):'a cotizar'))+'</span></button>').join('')+'</div>' : '<div class="muted" style="font-size:13px">No encontré ese producto en la lista'+(may?' mayorista':'')+'.</div>')+
+    '<button class="btn sm ghost" data-act="addFree">+ Agregar '+(pc.cant!==1?pc.cant.toLocaleString('es-AR')+' × ':'')+'“'+esc(q)+'” como ítem libre</button>';
 }
 function pintarResultados(){ const c=document.getElementById('itq-res'); if(c) c.innerHTML = prodResultsHTML(); }
 function machete(d){
@@ -898,7 +900,7 @@ function buscadorProductos(placeholder){
 }
 function itemsEditor(items){
   return '<div class="stack" style="gap:8px"><h3>Productos</h3>'+
-    buscadorProductos('Agregar producto: escribí, usá ↑ ↓ y Enter')+
+    buscadorProductos('Cantidad y producto, ej: 5 pan dulce · ↑ ↓ y Enter')+
     '<div class="lines">'+
     (items.length? items.map((l,i)=>'<div class="line"><div class="nm">'+esc(l.nombre)+(l.pid?'':'<small>ítem libre</small>')+'</div><input class="f num" id="it-c-'+i+'" data-it="'+i+'" data-k="cant" type="number" inputmode="decimal" step="any" value="'+esc(l.cant)+'" aria-label="Cantidad"><input class="f num" id="it-p-'+i+'" data-it="'+i+'" data-k="precio" type="number" inputmode="decimal" step="any" value="'+esc(l.precio)+'" aria-label="Precio unitario"><button class="rm" data-act="rmItem" data-i="'+i+'" aria-label="Quitar">×</button></div>').join('') : '<div class="muted" style="font-size:13px">Todavía no agregaste productos.</div>')+
     '</div>'+(items.length?'<div class="row muted" style="font-size:11.5px;justify-content:flex-end;gap:4px;padding-right:44px"><span style="width:64px;text-align:center">cant.</span><span style="width:96px;text-align:center">precio unit.</span></div>':'')+'</div>';
@@ -976,7 +978,7 @@ SHEETS.pedMay = function(){
     '<div class="stack" style="gap:6px"><span class="lb" style="margin:0">IVA</span><div class="subtabs"><button data-act="pedIva" data-v="0" aria-pressed="'+(!d.iva)+'">Sin IVA</button><button data-act="pedIva" data-v="1" aria-pressed="'+(!!d.iva)+'">Con IVA (+'+IVA_PCT+'%)</button></div></div>'+
     machete(d)+
     '<div class="stack" style="gap:8px"><h3>Productos</h3>'+
-      buscadorProductos('Agregar de la lista mayorista: escribí, usá ↑ ↓ y Enter')+
+      buscadorProductos('Cantidad y producto, ej: 10 pan integral · ↑ ↓ y Enter')+
       (lineas ? '<div class="row muted may-h"><span>Cant.</span><span>Producto</span><span>Valor unit.</span><span>Importe</span><span></span></div><div class="lines">'+lineas+'</div>' : '<div class="muted" style="font-size:13px">Todavía no agregaste productos.</div>')+
       (!lista.length ? '<div class="note">Todavía no hay lista de precios mayorista. Se carga importando PEDIDOS MAYORISTAS (hoja "Lista de precios").</div>' : '')+
     '</div>'+
@@ -1704,8 +1706,8 @@ const A = {
   editPedido: el => { const p=S.pedidos[el.dataset.id]; if(p) openSheet(p.canal==='Mayorista'?'pedMay':'pedido', clone(p)); },
   abrirPedido: el => { const p=S.pedidos[el.dataset.id]; if(p) openSheet(p.canal==='Mayorista'?'pedMay':'pedido', clone(p)); },
   dupPedido: () => { const d=clone(SH.draft); delete d.id; d.pagos=[]; d.estado='pendiente'; d.entrega=today(); delete d.origen; if(d.canal==='Mayorista'){ d.remito=''; d.factura=''; } openSheet(d.canal==='Mayorista'?'pedMay':'pedido', d); toast('Copia lista para editar'); },
-  addItem: el => { const p=prodById(el.dataset.pid); if(!p) return; const it=SH.draft.items; const ex=it.find(l=>l.pid===p.id); if(ex) ex.cant=num(ex.cant)+1; else it.push({pid:p.id, nombre:p.nombre, cant:1, precio:(SH.draft.canal==='Mayorista' && p.precioMay) ? p.precioMay : (p.precio||0)}); SH.q=''; SH.sel=0; renderSheet(); const q=document.getElementById('itq'); if(q) q.focus(); },
-  addFree: () => { SH.draft.items.push({pid:'', nombre:SH.q.trim(), cant:1, precio:0}); SH.q=''; SH.sel=0; renderSheet(); const q=document.getElementById('itq'); if(q) q.focus(); },
+  addItem: el => { const p=prodById(el.dataset.pid); if(!p) return; const it=SH.draft.items; const ex=it.find(l=>l.pid===p.id); const c=partirCant(SH.q).cant; if(ex) ex.cant=num(ex.cant)+c; else it.push({pid:p.id, nombre:p.nombre, cant:c, precio:(SH.draft.canal==='Mayorista' && p.precioMay) ? p.precioMay : (p.precio||0)}); SH.q=''; SH.sel=0; renderSheet(); const q=document.getElementById('itq'); if(q) q.focus(); },
+  addFree: () => { const pc=partirCant(SH.q); SH.draft.items.push({pid:'', nombre:pc.q.trim(), cant:pc.cant, precio:0}); SH.q=''; SH.sel=0; renderSheet(); const q=document.getElementById('itq'); if(q) q.focus(); },
   rmItem: el => { SH.draft.items.splice(+el.dataset.i,1); renderSheet(); },
   addPago: el => { const d=SH.draft; const t=totPedido(d); const tipo=el.dataset.tipo; d.pagos=d.pagos||[];
     const monto = tipo==='sena' ? Math.round(t.aCobrar/2/100)*100 : tipo==='saldo' ? Math.max(0,Math.round(t.saldo)) : '';
