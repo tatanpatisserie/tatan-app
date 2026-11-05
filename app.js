@@ -503,15 +503,15 @@ function pedidoItem(p){
 /* ===== PEDIDOS ===== */
 function vistaPedBtns(){ const v=U.pedVista||'semana'; return '<div class="subtabs" style="min-width:180px"><button data-act="pedVista" data-v="semana" aria-pressed="'+(v==='semana')+'">Semana</button><button data-act="pedVista" data-v="lista" aria-pressed="'+(v==='lista')+'">Lista</button></div>'; }
 /* Fecha especial → Cantidad: cuánto hay pedido de cada producto, por fecha de entrega, para saber qué producir */
-function cantidadesFE(arr, fe){
-  const desde = today(); const porFecha = {}; const tot = {};
+function cantidadesFE(arr, fe, todo){
+  const desde = todo ? '' : today(); const porFecha = {}; const tot = {};
   arr.filter(p=>p.estado!=='cancelado' && (p.entrega||'')>=desde).forEach(p=>{ const k=p.entrega||''; const m=porFecha[k]||(porFecha[k]={n:0,prod:{}}); m.n++;
     (p.items||[]).forEach(l=>{ const nom=(l.nombre||'Sin nombre').trim(); const c=num(l.cant); m.prod[nom]=(m.prod[nom]||0)+c; tot[nom]=(tot[nom]||0)+c; }); });
   const fechas = Object.keys(porFecha).sort();
-  if(!fechas.length) return '<div class="card empty"><h2>No hay pedidos '+(fe===false?'minoristas':'de fecha especial')+' por delante</h2><p>Cuando se carguen, acá vas a ver cuánto hay que producir de cada producto, día por día.</p></div>';
+  if(!fechas.length) return '<div class="card empty"><h2>No hay pedidos '+(fe===false?'minoristas':'de fecha especial')+(todo?(fe?' este mes':' esta semana'):' por delante')+'</h2><p>Cuando se carguen, acá vas a ver cuánto hay que producir de cada producto, día por día.</p></div>';
   const tabla = prod => '<table class="stat-t"><thead><tr><th>Producto</th><th class="num" style="text-align:right">Cantidad</th></tr></thead><tbody>'+
     Object.entries(prod).sort((a,b)=>a[0].localeCompare(b[0],'es')).map(([n,c])=>'<tr><td>'+esc(n)+'</td><td class="num" style="text-align:right"><b>'+c.toLocaleString('es-AR')+'</b></td></tr>').join('')+'</tbody></table>';
-  return '<div class="note">Desde hoy en adelante, sin los cancelados. Sirve para saber cuánto producir para cada día.</div>'+
+  return '<div class="note">'+(todo?'Total por día de '+(fe?'este mes':'esta semana'):'Desde hoy en adelante')+', sin los cancelados. Sirve para saber cuánto producir para cada día.</div>'+
     fechas.map(k=>'<div class="group-h">'+esc(k?fdateShort(k):'Sin fecha')+' · '+porFecha[k].n+' pedido'+(porFecha[k].n===1?'':'s')+'</div><div class="card">'+tabla(porFecha[k].prod)+'</div>').join('')+
     (fechas.length>1?'<div class="group-h">Total de todas las fechas</div><div class="card">'+tabla(tot)+'</div>':'');
 }
@@ -526,8 +526,13 @@ R.pedidos = function(){
   arr = arr.filter(p => may ? p.canal==='Mayorista' : fe ? esFE(p) : (p.canal!=='Mayorista' && !esFE(p)));
   if(!may && !fe) arr = arr.filter(p=>!esVentaDia(p));
   if(!may && U.fCanal) arr = arr.filter(p=>(p.canal||'Pedido particular')===U.fCanal);
+  // Período: minoristas por semana, fechas especiales por mes. Si buscás algo, busca en todas las fechas.
+  const sIni = U.lSem || lunesDe(today()), sFin = addDays(sIni,6), mes = U.lMes || today().slice(0,7);
+  const per = fe ? '<div class="monthbar"><button class="btn" data-act="lNav" data-n="-1" aria-label="Mes anterior">‹</button><div style="text-align:center"><div class="eyebrow">Fechas especiales del mes</div><h2>'+esc(mesLabel(mes))+'</h2></div><button class="btn" data-act="lNav" data-n="1" aria-label="Mes siguiente">›</button></div>'
+    : '<div class="monthbar"><button class="btn" data-act="lNav" data-n="-7" aria-label="Semana anterior">‹</button><div style="text-align:center"><div class="eyebrow">Pedidos minoristas de la semana</div><h2>'+fdateShort(sIni).replace(/^\S+ /,'')+' al '+fdateShort(sFin).replace(/^\S+ /,'')+'</h2></div><button class="btn" data-act="lNav" data-n="7" aria-label="Semana siguiente">›</button></div>';
   if(q) arr = arr.filter(p=> norm(p.clienteNombre+' '+(p.remito||'')+' '+(p.items||[]).map(l=>l.nombre).join(' ')+' '+(p.notas||'')).includes(q));
-  const feCant = f==='cantidad' ? cantidadesFE(arr, fe) : null;
+  else arr = arr.filter(p=> fe ? (p.entrega||'').startsWith(mes) : ((p.entrega||'')>=sIni && (p.entrega||'')<=sFin));
+  const feCant = f==='cantidad' ? cantidadesFE(arr, fe, true) : null;
   arr.sort(byEntrega); if(f==='entregados'||f==='todos') arr.reverse();
   const totalArr = arr.length; const lim = U.pedLim||120; arr = arr.slice(0, lim);
   const groups = []; let cur=null;
@@ -537,13 +542,14 @@ R.pedidos = function(){
   return `<div class="stack">
     <div class="row between"><h1>Pedidos</h1><div class="row">${vistaPedBtns()}<button class="btn pri sm" data-act="${may?'nuevoMay':fe?'nuevoFE':'nuevoPedido'}">${svg('plus')}${may?'Nuevo mayorista':fe?'Nuevo pedido fecha especial':'Nuevo pedido minorista'}</button></div></div>
     <div class="subtabs"><button data-act="listaTipo" data-v="min" aria-pressed="${!fe}">Minoristas</button><button data-act="listaTipo" data-v="fe" aria-pressed="${fe}">Fechas especiales</button></div>
+    ${q?'<div class="note">Buscando en todas las fechas.</div>':per}
     <div class="search">${svg('search')}<input class="f" id="qped" placeholder="${may?'Buscar por cliente, remito o producto':'Buscar por cliente o producto'}" value="${esc(U.q)}" data-bind="q"></div>
     <div class="chips">${chip('activos','Activos')}${chip('deben','Deben plata')}${chip('entregados','Entregados')}${chip('todos','Todos')}${chip('cantidad','Cantidad')}
       ${may||fe?'':'<select class="chip" id="fcanal" data-bind="fCanal" aria-label="Canal"><option value="">Todos los canales</option>'+CANALES_MIN.map(c=>'<option'+(U.fCanal===c?' selected':'')+'>'+c+'</option>').join('')+'</select>'}</div>
     ${feCant!=null ? feCant : groups.length ? groups.map(g=>'<div class="group-h">'+esc(gname(g.k))+'</div><div class="list">'+g.items.map(p=>f==='activos'?'<div class="itemwrap">'+pedidoItem(p)+'<button class="btn sm ent" data-act="entAsk" data-id="'+esc(p.id)+'">Entregado</button></div>':pedidoItem(p)).join('')+'</div>').join('') + (totalArr>lim?'<button class="btn" data-act="masPed">Ver más ('+(totalArr-lim).toLocaleString('es-AR')+')</button>':'') :
       (may ? '<div class="card empty"><h2>No hay pedidos mayoristas acá</h2><p>Cargá el pedido con el cliente, el remito y los productos con el precio de la lista mayorista.</p><button class="btn pri" data-act="nuevoMay">Nuevo pedido mayorista</button></div>'
-           : fe ? '<div class="card empty"><h2>No hay pedidos de fecha especial acá</h2><p>Cuando carguemos los pedidos de fechas especiales los vas a ver en esta lista.</p></div>'
-           : '<div class="card empty"><h2>No hay pedidos minoristas acá</h2><p>Cargá un pedido con fecha de entrega, seña y saldo.</p><button class="btn pri" data-act="nuevoPedido">Nuevo pedido minorista</button></div>')}
+           : fe ? '<div class="card empty"><h2>No hay pedidos de fecha especial este mes</h2><p>Cuando carguemos los pedidos de fechas especiales los vas a ver en esta lista.</p></div>'
+           : '<div class="card empty"><h2>No hay pedidos minoristas esta semana</h2><p>Cargá un pedido con fecha de entrega, seña y saldo.</p><button class="btn pri" data-act="nuevoPedido">Nuevo pedido minorista</button></div>')}
   </div>`;
 };
 /* ===== PRESUPUESTOS ===== */
@@ -1687,6 +1693,7 @@ const A = {
     closeSheet(); toast('Borrado'); },
   nuevoPedido: () => openSheet('pedido', nuevoPedido({canal:'WhatsApp'})),
   nuevoMay: () => openSheet('pedMay', nuevoPedido({canal:'Mayorista', remito:'', iva:false, entrega: today()})),
+  lNav: el => { const n=+el.dataset.n; if(U.listaTipo==='fe'){ const d=new Date((U.lMes||today().slice(0,7))+'-15T12:00:00'); d.setMonth(d.getMonth()+n); U.lMes=d.toISOString().slice(0,7); } else U.lSem = addDays(U.lSem||lunesDe(today()), n); U.pedLim=120; render(); },
   listaTipo: el => { U.listaTipo = el.dataset.v; U.pedLim = 120; render(); },
   pedTipo: el => { U.pedTipo = el.dataset.v; U.pedLim = 120; render(); },
   verCuentas: () => { U.fCli='Cuenta corriente'; U.q=''; location.hash='#clientes'; },
