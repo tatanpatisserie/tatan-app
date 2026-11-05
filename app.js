@@ -548,7 +548,7 @@ R.pedidos = function(){
 /* ===== PRESUPUESTOS ===== */
 function estadoPresu(p){ if(p.estado==='aceptado') return ['Aceptado','p-ok']; if(p.estado==='rechazado') return ['Rechazado','p-bad']; if(p.validoHasta && p.validoHasta<today()) return ['Vencido','t-ent']; return ['Enviado','t-pend']; }
 function etiquetasPresu(p){ const e=estadoPresu(p); const t=totPedido(p);
-  return '<span class="row" style="gap:5px;flex-wrap:wrap"><span class="pill '+e[1]+'">'+e[0]+'</span>'+(p.pedidoId?'<span class="pill t-pas">Pasado a pedido</span>':'')+(t.pagado>0?'<span class="pill t-wa">'+(t.saldo<=0.5?'Pagado':'Con seña')+'</span>':'')+(num(p.descPct)?'<span class="pill t-otro">'+num(p.descPct)+'% desc.</span>':'')+'</span>'; }
+  return '<span class="row" style="gap:5px;flex-wrap:wrap"><span class="pill '+e[1]+'">'+e[0]+'</span>'+(p.pedidoId?'<span class="pill t-pas">Pasado a pedido</span>':'')+(p.cuentaCorriente?'<span class="pill t-cc">Cuenta corriente</span>':'')+(t.pagado>0?'<span class="pill t-wa">'+(t.saldo<=0.5?'Pagado':'Con seña')+'</span>':'')+(num(p.descPct)?'<span class="pill t-otro">'+num(p.descPct)+'% desc.</span>':'')+'</span>'; }
 R.presupuestos = function(){
   const arr = Object.values(S.presupuestos).sort((a,b)=>(b.numero||0)-(a.numero||0));
   return `<div class="stack">
@@ -919,8 +919,8 @@ function clienteFields(d){
   const conocido = d.telefono && clientePorTel(d.telefono);
   return '<datalist id="dl-cli">'+opts+'</datalist><div class="grid2">'+fld('telefono','Teléfono',d.telefono,'tel','placeholder="Ej: 223 555 1234"')+fld('clienteNombre','Cliente',d.clienteNombre,'text','list="dl-cli" autocomplete="off"')+'</div>'+
     (conocido?'<div class="muted" style="font-size:12.5px;margin-top:-6px">Cliente ya cargado con ese teléfono.</div>':'')+
-    (cc ? '<div class="note">Va a la cuenta corriente'+(cEx?' de <b>'+esc(cEx.nombre)+'</b>, que hoy debe <b>'+$(saldoCliente(cEx.id))+'</b>':'')+'. No hace falta cargar el pago: se cobra después desde Más → Clientes.</div>' : '')+
-    (SH.type==='pedido' ? '<label class="ckline"><input type="checkbox" data-act="tglCC" '+(esCC(d)?'checked':'')+'> Cuenta corriente</label>' : '')+
+    (cc ? '<div class="note">'+(SH.type==='presu'?'Al pasarlo a pedido va a la cuenta corriente':'Va a la cuenta corriente')+(cEx?' de <b>'+esc(cEx.nombre)+'</b>, que hoy debe <b>'+$(saldoCliente(cEx.id))+'</b>':'')+'. No hace falta cargar el pago: se cobra después desde Más → Clientes.</div>' : '')+
+    (SH.type==='pedido'||SH.type==='presu' ? '<label class="ckline"><input type="checkbox" data-act="tglCC" '+(esCC(d)?'checked':'')+'> Cuenta corriente</label>' : '')+
     (SH.type==='pedido' ? '<label class="ckline"><input type="checkbox" data-act="tglRetira" '+(d.retiraOtro?'checked':'')+'> Retira otra persona</label>'+(d.retiraOtro?fld('retiraNombre','Nombre de quien retira',d.retiraNombre||'','text','autocomplete="off"'):'') : '');
 }
 function findOrCreateCliente(d){
@@ -1736,7 +1736,7 @@ const A = {
   jpgPresu: () => bajarPresuJPG(SH.draft),
   presuAPedido: async () => { const d=SH.draft; if(!(d.items||[]).length){ toast('El presupuesto no tiene productos'); return; }
     if(d.clienteNombre) d.clienteId=findOrCreateCliente(d);
-    const pid = await save('pedidos', nuevoPedido({clienteNombre:d.clienteNombre, clienteId:d.clienteId||'', telefono:d.telefono, canal:'Evento', entrega:d.fechaEvento||today(), items:clone(d.items), descuento:d.descuento, descPct:d.descPct||'', envio:d.envio||'', pagos:clone(d.pagos||[]), mensaje:d.mensaje||'', notas:[d.evento, d.invitados?d.invitados+' invitados':'', 'Presupuesto N° '+pad(d.numero)].filter(Boolean).join(' · '), presupuestoId:d.id||''}));
+    const pid = await save('pedidos', nuevoPedido({clienteNombre:d.clienteNombre, clienteId:d.clienteId||'', telefono:d.telefono, canal:'Evento', entrega:d.fechaEvento||today(), items:clone(d.items), descuento:d.descuento, descPct:d.descPct||'', envio:d.envio||'', pagos:clone(d.pagos||[]), mensaje:d.mensaje||'', cuentaCorriente:!!d.cuentaCorriente, notas:[d.evento, d.invitados?d.invitados+' invitados':'', 'Presupuesto N° '+pad(d.numero)].filter(Boolean).join(' · '), presupuestoId:d.id||''}));
     d.estado='aceptado'; d.pedidoId=pid; const id = await save('presupuestos', d);
     const n=neg(); if(num(d.numero)>=num(n.proxPresupuesto)) saveDoc('negocio', Object.assign({}, S.negocio, {proxPresupuesto:num(d.numero)+1}));
     openSheet('pedido', clone(S.pedidos[pid])); toast('Pasado a pedido. Cargá la seña.'); },
