@@ -206,6 +206,16 @@ table.tbl{border-collapse:collapse;width:100%;font-size:13.5px}
 .cklist{display:flex;flex-direction:column;gap:2px}
 .ckrow{display:flex;align-items:center;gap:10px;padding:5px 0;font-size:14.5px}
 .ckrow.done .ckn{text-decoration:line-through;color:var(--muted)}
+.ckrow .ckn{flex:1}
+.ckrow.urgmax{background:var(--bad-soft);border-radius:10px;padding:5px 8px;margin:0 -8px}
+.ckrow.urgmax .ckn{color:var(--bad);font-weight:700}
+.pill.p-urgmax{background:var(--bad);color:#fff;font-weight:800;letter-spacing:.02em}
+.ordline{display:flex;flex-direction:column;gap:6px;padding-bottom:8px;border-bottom:1px solid var(--line)}
+.urgsel{display:flex;gap:6px;flex-wrap:wrap}
+.urgsel button{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:5px 10px;font:inherit;font-size:12.5px;font-weight:600;color:var(--muted);cursor:pointer}
+.urgsel .u-n[aria-pressed="true"]{background:var(--surface-2);color:var(--ink);border-color:var(--muted)}
+.urgsel .u-urg[aria-pressed="true"]{background:var(--warn-soft);color:var(--warn);border-color:var(--warn)}
+.urgsel .u-max[aria-pressed="true"]{background:var(--bad);color:#fff;border-color:var(--bad)}
 .ck{width:30px;height:30px;flex-shrink:0;border-radius:9px;border:2px solid var(--line);background:var(--surface);cursor:pointer;font-weight:800;font-size:16px;color:var(--accent-ink);display:grid;place-items:center}
 .ck.on{background:var(--ok);border-color:var(--ok);color:var(--surface)}
 .stepper{display:flex;align-items:center;gap:4px;flex-shrink:0}
@@ -268,8 +278,8 @@ table.tbl{border-collapse:collapse;width:100%;font-size:13.5px}
 </div>
 <div id="toast" class="toast" hidden></div>
 <script src="vendor/supabase.js"></script>
-<script src="config.js?v=20261105g"></script>
+<script src="config.js?v=20261105h"></script>
 
-<script src="app.js?v=20261105g"></script>
+<script src="app.js?v=20261105h"></script>
 </body>
 </html>

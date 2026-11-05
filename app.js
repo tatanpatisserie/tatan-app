@@ -820,10 +820,24 @@ function faltantesPT(){ return Object.values(S.stockpt).filter(i=>num(i.minimo)>
 const check = (on, act, attrs) => '<button class="ck'+(on?' on':'')+'" data-act="'+act+'" '+attrs+' aria-pressed="'+(!!on)+'" aria-label="'+(on?'Marcar como pendiente':'Marcar como listo')+'">'+(on?'✓':'')+'</button>';
 function diaProd(f){ if(f===today()) return 'de hoy'; if(f===addDays(today(),1)) return 'de mañana'; return 'del '+fdateShort(f); }
 function ordDelDia(f, sinId){ return Object.values(S.produccion).find(o=>!o.archivada && o.fecha===f && o.id!==sinId); }
-function sumarItems(base, nuevos){ const out=clone(base||[]); (nuevos||[]).forEach(n=>{ const k=n.stockId?'s:'+n.stockId:'n:'+norm(n.nombre); const e=out.find(x=>(x.stockId?'s:'+x.stockId:'n:'+norm(x.nombre))===k && !x.listo); if(e) e.cant=num(e.cant)+num(n.cant); else out.push(Object.assign({},n,{listo:false})); }); return out; }
+const URG_N = {'':0, urg:1, max:2};
+function sumarItems(base, nuevos){ const out=clone(base||[]); (nuevos||[]).forEach(n=>{ const k=n.stockId?'s:'+n.stockId:'n:'+norm(n.nombre); const e=out.find(x=>(x.stockId?'s:'+x.stockId:'n:'+norm(x.nombre))===k && !x.listo); if(e){ e.cant=num(e.cant)+num(n.cant); if(URG_N[n.urg||'']>URG_N[e.urg||'']) e.urg=n.urg; if(n.pendienteDe && !e.pendienteDe) e.pendienteDe=n.pendienteDe; } else out.push(Object.assign({},n,{listo:false})); }); return out; }
+const urgPill = u => u==='max'?'<span class="pill p-urgmax">URGENTE SÍ O SÍ</span>':u==='urg'?'<span class="pill p-warn">Urgente</span>':'';
+// Lo que no se terminó un día pasa solo al día siguiente (a hoy), como pendiente
+let _pasando=false;
+function pasarPendientes(){ if(readOnly||_pasando) return; const hoy=today();
+  const viejas=Object.values(S.produccion).filter(o=>!o.archivada && o.fecha && o.fecha<hoy && (o.items||[]).some(x=>!x.listo)); if(!viejas.length) return;
+  _pasando=true; try{
+    const nuevos=[]; viejas.forEach(o=>{ (o.items||[]).filter(x=>!x.listo).forEach(x=>nuevos.push(Object.assign({},x,{pendienteDe:x.pendienteDe||o.fecha}))); const hechos=(o.items||[]).filter(x=>x.listo); if(hechos.length) save('produccion', Object.assign({},o,{items:hechos})); else remove('produccion', o.id); });
+    const dest=ordDelDia(hoy);
+    if(dest) save('produccion', Object.assign({},dest,{items:sumarItems(dest.items,nuevos)}));
+    else save('produccion', {id:'prod-'+hoy, fecha:hoy, items:nuevos, origen:'pendientes', nota:'', armadaPor:'', creado:new Date().toISOString()});
+    toast(nuevos.length+(nuevos.length===1?' tarea pendiente pasó':' tareas pendientes pasaron')+' a hoy');
+  } finally { _pasando=false; } }
 const DIAS_L = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'], MESES_L = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
 function fdiaLargo(iso){ const d=new Date(iso+'T12:00:00'); return DIAS_L[d.getDay()]+' '+d.getDate()+' de '+MESES_L[d.getMonth()]; }
 R.produccion = function(){
+  setTimeout(pasarPendientes, 0);
   const dia = U.pDia || (U.pDia = today());
   const ords = Object.values(S.produccion).filter(o=>o.fecha===dia).sort((a,b)=>(a.archivada?1:0)-(b.archivada?1:0) || (a.creado||'').localeCompare(b.creado||''));
   const prox = [...new Set(Object.values(S.produccion).filter(o=>!o.archivada && (o.fecha||'')>=today() && o.fecha!==dia).map(o=>o.fecha))].sort().slice(0,8);
@@ -831,9 +845,9 @@ R.produccion = function(){
   const bar = '<div class="monthbar"><button class="btn" data-act="pNav" data-n="-1" aria-label="Día anterior">‹</button><div style="text-align:center"><div class="eyebrow">'+(rel||'Producción del día')+'</div><div class="row" style="gap:8px;justify-content:center"><h2>'+esc(fdiaLargo(dia))+'</h2><label class="calbtn" title="Elegir día">'+svg('calendar')+'<input type="date" data-chg="pDiaPick" value="'+dia+'" aria-label="Elegir día"></label></div>'+(dia!==today()?'<button class="btn sm ghost" data-act="pHoy" style="margin-top:4px">Volver a hoy</button>':'')+'</div><button class="btn" data-act="pNav" data-n="1" aria-label="Día siguiente">›</button></div>';
   const falt = faltantesPT().length;
   const ordCard = o => { const its=o.items||[]; const l=its.filter(x=>x.listo).length; const done = its.length && l===its.length;
-    return '<div class="card stack" style="gap:8px"><div class="row between" style="align-items:flex-start"><div><h3>Producción '+diaProd(o.fecha)+'</h3><span class="muted" style="font-size:12.5px">'+(o.origen==='stock'?'Faltantes del stock':o.origen==='mixta'?'Faltantes + orden':'Orden manual')+(o.armadaPor?' · armó '+esc(o.armadaPor):'')+'</span></div><span class="pill '+(done?'p-ok':l?'p-pis':'p-neu')+'">'+l+'/'+its.length+'</span></div>'+
+    return '<div class="card stack" style="gap:8px"><div class="row between" style="align-items:flex-start"><div><h3>Producción '+diaProd(o.fecha)+'</h3><span class="muted" style="font-size:12.5px">'+(o.origen==='stock'?'Faltantes del stock':o.origen==='mixta'?'Faltantes + orden':o.origen==='pendientes'?'Pendientes de días anteriores':'Orden manual')+(o.armadaPor?' · armó '+esc(o.armadaPor):'')+'</span></div><span class="pill '+(done?'p-ok':l?'p-pis':'p-neu')+'">'+l+'/'+its.length+'</span></div>'+
       '<div class="bar"><i style="width:'+(its.length?l/its.length*100:0)+'%"></i></div>'+
-      '<div class="cklist">'+its.map((x,i)=>'<div class="ckrow'+(x.listo?' done':'')+'">'+check(x.listo,'tglProd','data-id="'+o.id+'" data-i="'+i+'"')+'<span class="ckn"><b class="num">'+esc(x.cant)+'</b> '+esc(x.nombre)+'</span></div>').join('')+'</div>'+
+      '<div class="cklist">'+its.map((x,i)=>[x,i]).sort((a,b)=>(a[0].listo?1:0)-(b[0].listo?1:0) || URG_N[b[0].urg||'']-URG_N[a[0].urg||''] || a[1]-b[1]).map(([x,i])=>'<div class="ckrow'+(x.listo?' done':'')+(x.urg==='max'&&!x.listo?' urgmax':'')+'">'+check(x.listo,'tglProd','data-id="'+o.id+'" data-i="'+i+'"')+'<span class="ckn"><b class="num">'+esc(x.cant)+'</b> '+esc(x.nombre)+(x.pendienteDe&&!x.listo?' <small class="muted">· quedó del '+esc(fdateShort(x.pendienteDe))+'</small>':'')+'</span>'+(x.listo?'':urgPill(x.urg))+'</div>').join('')+'</div>'+
       (o.nota?'<div class="note">'+esc(o.nota)+'</div>':'')+
       '<div class="row" style="justify-content:flex-end">'+(SECTOR!=='cocina'?'<button class="btn sm ghost" data-act="editOrden" data-id="'+o.id+'">Editar</button>':'')+(done&&!o.archivada?'<button class="btn sm" data-act="archivarOrden" data-id="'+o.id+'">Archivar</button>':'')+'</div></div>'; };
   return `<div class="stack">
@@ -1203,12 +1217,13 @@ SHEETS.ajuste = function(){
   return { title:'Ajustar precios', body, foot:'<span class="grow"></span><button class="btn pri" data-act="aplicarAjuste" '+(!num(d.pct)||readOnly?'disabled':'')+'>Aplicar a '+afect.length+' productos</button>' };
 };
 
+const urgSel = (x,i) => '<div class="urgsel" role="group" aria-label="Urgencia">'+[['','Por hacer'],['urg','Urgente'],['max','URGENTE SÍ O SÍ']].map(([v,l])=>'<button class="u-'+(v||'n')+'" data-act="ordUrg" data-i="'+i+'" data-v="'+v+'" aria-pressed="'+((x.urg||'')===v)+'">'+l+'</button>').join('')+'</div>';
 SHEETS.orden = function(){
   const d = SH.draft; const q = norm(SH.q);
   const res = q.length>=2 ? Object.values(S.stockpt).filter(i=>norm(i.nombre).includes(q)).slice(0,8) : [];
   const body = '<div class="grid2">'+fld('fecha','Fecha',d.fecha,'date')+fld('armadaPor','La armó',d.armadaPor||'','text','placeholder="Ej: Martina"')+'</div>'+
     (ordDelDia(d.fecha, d.id)?'<div class="note">Ya hay una producción '+diaProd(d.fecha)+'. Lo que cargues acá se suma a esa.</div>':'')+
-    '<div class="stack" style="gap:8px"><h3>Qué producir</h3><div class="lines">'+((d.items||[]).map((x,i)=>'<div class="line" style="grid-template-columns:1fr 80px 30px"><div class="nm">'+esc(x.nombre)+(x.stockId&&S.stockpt[x.stockId]?'<small>hay '+num(S.stockpt[x.stockId].stock)+' en stock</small>':'')+'</div><input class="f num" id="oi-'+i+'" data-oi="'+i+'" type="number" inputmode="decimal" step="any" value="'+esc(x.cant)+'" aria-label="Cantidad"><button class="rm" data-act="rmOrdItem" data-i="'+i+'" aria-label="Quitar">×</button></div>').join('') || '<div class="muted" style="font-size:13px">No hay nada para producir. Buscá productos abajo.</div>')+'</div>'+
+    '<div class="stack" style="gap:8px"><h3>Qué producir</h3><div class="lines">'+((d.items||[]).map((x,i)=>'<div class="ordline"><div class="line" style="grid-template-columns:1fr 80px 30px"><div class="nm">'+esc(x.nombre)+(x.stockId&&S.stockpt[x.stockId]?'<small>hay '+num(S.stockpt[x.stockId].stock)+' en stock</small>':'')+'</div><input class="f num" id="oi-'+i+'" data-oi="'+i+'" type="number" inputmode="decimal" step="any" value="'+esc(x.cant)+'" aria-label="Cantidad"><button class="rm" data-act="rmOrdItem" data-i="'+i+'" aria-label="Quitar">×</button></div>'+urgSel(x,i)+'</div>').join('') || '<div class="muted" style="font-size:13px">No hay nada para producir. Buscá productos abajo.</div>')+'</div>'+
     '<div class="search">'+svg('search')+'<input class="f" id="ordq" data-sq="1" placeholder="Agregar producto del stock: escribí 2 letras" value="'+esc(SH.q)+'" autocomplete="off"></div>'+
     (res.length?'<div class="results">'+res.map(i=>'<button data-act="addOrdItem" data-id="'+i.id+'"><span>'+esc(i.nombre)+'</span><span class="muted num">hay '+num(i.stock)+'</span></button>').join('')+'</div>':'')+
     (q.length>=2?'<button class="btn sm ghost" data-act="addOrdFree">+ Agregar “'+esc(SH.q)+'” como ítem libre</button>':'')+'</div>'+
@@ -1699,6 +1714,7 @@ const A = {
   editOrden: el => { const o=S.produccion[el.dataset.id]; if(o) openSheet('orden', clone(o)); },
   addOrdItem: el => { const i=S.stockpt[el.dataset.id]; if(!i) return; const meta = num(i.objetivo)>num(i.stock)? num(i.objetivo)-num(i.stock) : 1; SH.draft.items.push({stockId:i.id, nombre:i.nombre, cant:Math.ceil(meta), listo:false}); SH.q=''; renderSheet(); },
   addOrdFree: () => { SH.draft.items.push({stockId:'', nombre:SH.q.trim(), cant:1, listo:false}); SH.q=''; renderSheet(); },
+  ordUrg: el => { const x=SH.draft.items[+el.dataset.i]; if(x){ x.urg=el.dataset.v; renderSheetSoft(); } },
   rmOrdItem: el => { SH.draft.items.splice(+el.dataset.i,1); renderSheet(); },
   saveOrden: () => { const d=SH.draft; if(!(d.items||[]).length){ toast('Agregá al menos un producto'); return; } d.items=d.items.map(x=>Object.assign({},x,{cant:num(x.cant)||1})); if(!d.creado) d.creado=new Date().toISOString(); U.pDia=d.fecha; const otra=ordDelDia(d.fecha, d.id);
     if(otra){ const m=Object.assign({},otra,{items:sumarItems(otra.items,d.items), origen:otra.origen===d.origen?otra.origen:'mixta', nota:[otra.nota,d.nota].filter(Boolean).join(' · '), armadaPor:otra.armadaPor||d.armadaPor}); save('produccion', m); if(d.id) remove('produccion', d.id); closeSheet(); toast('Sumado a la producción '+diaProd(d.fecha)); return; }
