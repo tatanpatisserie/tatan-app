@@ -486,6 +486,7 @@ R.inicio = function(){
 const byEntrega = (a,b) => ((a.entrega||'')+(a.hora||'')).localeCompare((b.entrega||'')+(b.hora||''));
 const ESTADOS = {pendiente:['Pendiente','p-neu'], produccion:['En producción','p-pis'], listo:['Listo','p-acc'], entregado:['Entregado','p-ok'], cancelado:['Cancelado','p-bad']};
 const CANALES = ['Pedido particular','Local','Evento','Fecha especial','Mayorista','Empresa','Cuenta corriente'];
+const esFE = p => p.canal==='Fecha especial' || !!p.fechaEspecial; // pedido de fecha especial (queda rotulado solo)
 const CANALES_MIN = ['Local','WhatsApp']; // la cuenta corriente es un casillero aparte
 const MEDIOS = ['Efectivo','Transferencia','QR Galicia','Mercado Pago','Tarjeta','Cuenta corriente'];
 function saldoPill(p){ const t = totPedido(p); if(t.aCobrar<=0) return ''; if(t.saldo<=0.5) return '<span class="pill p-ok">Pagado</span>'; if(t.pagado>0) return '<span class="pill p-warn">Debe '+$(t.saldo)+'</span>'; return '<span class="pill p-bad">Sin seña</span>'; }
@@ -495,7 +496,7 @@ function pedidoItem(p){
   return '<button class="item" data-act="editPedido" data-id="'+p.id+'">'+
     '<div class="datechip'+(p.entrega===today()?' today':'')+'">'+(d?'<span>'+DIAS[d.getDay()]+'</span><b>'+d.getDate()+'</b>':'<b>?</b>')+'</div>'+
     '<div class="main"><span class="t">'+esc(p.clienteNombre||'Sin nombre')+(p.remito?' <span class="muted" style="font-weight:500">· Rto '+esc(p.remito)+'</span>':'')+(p.retiraOtro&&p.retiraNombre?' <span class="muted" style="font-weight:500">· retira '+esc(p.retiraNombre)+'</span>':'')+(p.hora?' <span class="muted" style="font-weight:500">· '+esc(p.hora)+'</span>':'')+'</span><span class="s">'+esc(resumen||'Sin productos')+'</span>'+
-    '<span class="row" style="gap:5px"><span class="pill '+e[1]+'">'+e[0]+'</span>'+progresoPill(p)+(p.canal&&p.canal!=='Pedido particular'&&p.canal!=='Mayorista'?'<span class="pill p-neu">'+esc(p.canal)+'</span>':'')+(p.cuentaCorriente&&p.canal!=='Cuenta corriente'?'<span class="pill p-acc">Cuenta corriente</span>':'')+(p.iva?'<span class="pill p-neu">Con IVA</span>':'')+'</span></div>'+
+    '<span class="row" style="gap:5px"><span class="pill '+e[1]+'">'+e[0]+'</span>'+progresoPill(p)+(p.canal&&p.canal!=='Pedido particular'&&p.canal!=='Mayorista'?'<span class="pill p-neu">'+esc(p.canal)+'</span>':'')+(p.fechaEspecial&&p.canal!=='Fecha especial'?'<span class="pill p-acc">Fecha especial</span>':'')+(p.cuentaCorriente&&p.canal!=='Cuenta corriente'?'<span class="pill p-acc">Cuenta corriente</span>':'')+(p.iva?'<span class="pill p-neu">Con IVA</span>':'')+'</span></div>'+
     '<div class="end"><span class="num" style="font-weight:700">'+$(t.aCobrar)+'</span>'+saldoPill(p)+'</div></button>';
 }
 /* ===== PEDIDOS ===== */
@@ -521,7 +522,7 @@ R.pedidos = function(){
   if(f==='deben') arr = arr.filter(p=>p.estado!=='cancelado' && totPedido(p).saldo>0.5);
   if((U.pedVista||'semana')==='semana') return '<div class="stack"><div class="row between"><h1>Pedidos</h1>'+vistaPedBtns()+'</div>'+R.semana()+'</div>';
   const may = false, fe = true; // la lista es solo de fecha especial; minoristas y mayoristas se ven en la semana
-  arr = arr.filter(p => may ? p.canal==='Mayorista' : fe ? p.canal==='Fecha especial' : (p.canal!=='Mayorista' && p.canal!=='Fecha especial'));
+  arr = arr.filter(p => may ? p.canal==='Mayorista' : fe ? esFE(p) : (p.canal!=='Mayorista' && !esFE(p)));
   if(!may && !fe) arr = arr.filter(p=>!esVentaDia(p));
   if(!may && U.fCanal) arr = arr.filter(p=>(p.canal||'Pedido particular')===U.fCanal);
   if(q) arr = arr.filter(p=> norm(p.clienteNombre+' '+(p.remito||'')+' '+(p.items||[]).map(l=>l.nombre).join(' ')+' '+(p.notas||'')).includes(q));
@@ -708,7 +709,7 @@ function arreglarDoughy(root){
 let _ndPend=false;
 new MutationObserver(()=>{ if(_ndPend) return; _ndPend=true; requestAnimationFrame(()=>{ _ndPend=false; arreglarDoughy(document); }); }).observe(document.documentElement, {childList:true, subtree:true, characterData:true});
 /* ===== ESTADÍSTICAS ===== */
-function canalStat(p){ if(p.canal==='Mayorista') return 'Mayoristas'; if(p.canal==='Fecha especial') return 'Fecha especial'; if(p.origen==='bistrosoft') return 'Mostrador (Bistrosoft)';
+function canalStat(p){ if(p.canal==='Mayorista') return 'Mayoristas'; if(esFE(p)) return 'Fecha especial'; if(p.origen==='bistrosoft') return 'Mostrador (Bistrosoft)';
   if(p.canal==='Cuenta corriente' || p.cuentaCorriente) return 'Cuenta corriente'; if(p.canal==='Local') return 'Local'; if(p.canal==='WhatsApp') return 'WhatsApp'; return 'Pedidos de planilla (sin canal)'; }
 const CANAL_ORDEN = ['Local','WhatsApp','Cuenta corriente','Mayoristas','Fecha especial','Mostrador (Bistrosoft)','Pedidos de planilla (sin canal)'];
 function statsLocal(){
@@ -951,14 +952,14 @@ function bloquePedido(d, o){
 const SHEETS = {};
 SHEETS.pedido = function(){
   const d = SH.draft; const n = neg();
-  const body = clienteFields(d)+
-    '<div class="grid3">'+sel('canal','Canal de venta',d.canal==='Cuenta corriente'?'':d.canal,(d.canal==='Fecha especial'?['Fecha especial'].concat(CANALES_MIN):CANALES_MIN.includes(d.canal)||d.canal==='Cuenta corriente'||!d.canal?CANALES_MIN:CANALES_MIN.concat([d.canal])))+fld('entrega','Fecha de entrega',d.entrega,'date')+fld('hora','Hora',d.hora,'time')+'</div>'+
+  const body = (esFE(d)?'<div><span class="pill p-acc">Pedido de fecha especial</span></div>':'')+clienteFields(d)+
+    '<div class="grid3">'+sel('canal','Canal de venta',CANALES_MIN.includes(d.canal)?d.canal:'',CANALES_MIN)+fld('entrega','Fecha de entrega',d.entrega,'date')+fld('hora','Hora',d.hora,'time')+'</div>'+
     sel('estado','Estado',d.estado,Object.entries(ESTADOS).map(([k,v])=>[k,v[0]]))+
     bloquePedido(d, {notas:'notas', notasLbl:'Notas (sabores, deco, dirección de entrega)'})+
     delBlock('este pedido');
   const wa = waLink(d.telefono, resumenPedido(d));
   const foot = (d.id?'<button class="btn danger sm" data-act="delAsk">Borrar</button><button class="btn sm" data-act="dupPedido">Duplicar</button>':'')+'<button class="btn sm" data-act="copyPedido">Copiar resumen</button>'+(wa?'<a class="btn sm" href="'+esc(wa)+'" target="_blank" rel="noopener">WhatsApp</a>':'')+'<span class="grow"></span><button class="btn pri" data-act="savePedido" '+(readOnly?'disabled':'')+'>Guardar</button>';
-  return { title: d.id ? 'Pedido de '+(d.clienteNombre||'—') : (d.canal==='Fecha especial'?'Nuevo pedido fecha especial':'Nuevo pedido'), body, foot };
+  return { title: d.id ? 'Pedido de '+(d.clienteNombre||'—') : (esFE(d)?'Nuevo pedido fecha especial':'Nuevo pedido'), body, foot };
 };
 /* ===== PEDIDO MAYORISTA ===== */
 function clientesMay(){
@@ -1698,7 +1699,7 @@ const A = {
   tglCC: () => { const d=SH.draft; const on=!esCC(d); d.cuentaCorriente=on; if(!on && d.canal==='Cuenta corriente') d.canal='WhatsApp'; renderSheet(); },
   tglRetira: el => { SH.draft.retiraOtro = !SH.draft.retiraOtro; if(!SH.draft.retiraOtro) SH.draft.retiraNombre=''; renderSheet(); if(SH.draft.retiraOtro) setTimeout(()=>{ const x=document.getElementById('d-retiraNombre'); if(x) x.focus(); },30); },
   pedVista: el => { U.pedVista = el.dataset.v; render(); },
-  nuevoFE: () => openSheet('pedido', nuevoPedido({canal:'Fecha especial'})),
+  nuevoFE: () => openSheet('pedido', nuevoPedido({canal:'WhatsApp', fechaEspecial:true})),
   pedIva: el => { SH.draft.iva = el.dataset.v==='1'; renderSheet(); },
   ventaLocal: () => openSheet('pedido', nuevoPedido({canal:'Local', estado:'entregado', clienteNombre:'Mostrador'}), {venta:true}),
   entAsk: el => openSheet('entConf', {id: el.dataset.id}),
