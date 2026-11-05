@@ -54,7 +54,7 @@ const loaded = new Set();
 // Qué tablas lee cada sector. "rpc:" = vista segura sin precios.
 const FUENTES = {
   todo:   {pedidos:'t', presupuestos:'t', gastos:'t', clientes:'t', recetas:'t', insumos:'t', stockpt:'t', produccion:'t', proveedores:'t', movprov:'t', empleados:'t', horas:'t', novedades:'t', config:'t'},
-  local:  {pedidos:'t', presupuestos:'t', clientes:'t', stockpt:'t', produccion:'t', proveedores:'t', config:'t'},
+  local:  {pedidos:'t', presupuestos:'t', clientes:'t', stockpt:'t', produccion:'t', proveedores:'t', config:'t', insumos:'rpc:insumos_local'},
   cocina: {pedidos:'rpc:pedidos_cocina', insumos:'rpc:insumos_cocina', stockpt:'t', produccion:'t'}
 };
 const fuentes = () => FUENTES[SECTOR] || {};
@@ -1399,15 +1399,44 @@ SHEETS.prov = function(){
     (movs.length? '<div class="list">'+movs.slice(0,lim).map(m=>'<button class="item" data-act="editMov" data-id="'+m.id+'"><div class="main"><span class="t">'+esc(TIPO_LBL[m.tipo]||m.tipo)+(m.numero?' '+esc(m.numero):'')+'</span><span class="s">'+fdate(m.fecha)+(m.descripcion?' · '+esc(m.descripcion):'')+'</span></div><div class="end"><span class="num" style="font-weight:700'+(signoMov(m.tipo)<0?';color:var(--ok)':'')+'">'+(signoMov(m.tipo)<0?'− ':'')+$(m.total)+'</span></div></button>').join('')+'</div>'+(movs.length>lim?'<button class="btn" data-act="masMovs">Ver más ('+(movs.length-lim)+')</button>':'') : '<p class="muted">Sin comprobantes todavía.</p>');
   return { title: d.nombre||'Proveedor', body };
 };
+function movItemsBlock(d){
+  const q = norm(SH.q||''); const plata = SECTOR==='todo';
+  const res = q.length>=2 ? Object.values(S.insumos).filter(i=>norm(i.nombre+' '+(i.cat||'')).includes(q)).sort((a,b)=>(a.nombre||'').localeCompare(b.nombre||'')).slice(0,8) : [];
+  const sinLista = SECTOR==='local' && !loaded.has('insumos');
+  const lineas = (d.items||[]).map((l,i)=>{ const ins=S.insumos[l.insumoId]; const ant = plata && ins && num(ins.precio) ? num(ins.precio) : 0; const dif = ant && num(l.precio) ? (num(l.precio)-ant)/ant : null;
+    return '<div class="line mvl"><div class="nm">'+esc(l.nombre)+'<small>'+(ins&&ins.presentacion?'trae '+fmtCant(ins.presentacion,ins.unidad):'')+(ant?' · antes '+$(ant)+(dif!=null&&Math.abs(dif)>=0.005?' <b style="color:'+(dif>0?'var(--bad)':'var(--ok)')+'">'+(dif>0?'+':'')+pct(dif)+'</b>':''):'')+'</small></div>'+
+      '<label class="mvc"><span>Cant.</span><input class="f num" id="mi-c-'+i+'" data-mi="'+i+'" data-k="cant" type="number" inputmode="decimal" step="any" value="'+esc(l.cant)+'"></label>'+
+      '<label class="mvc"><span>Precio unit.</span><input class="f num" id="mi-p-'+i+'" data-mi="'+i+'" data-k="precio" type="number" inputmode="decimal" step="any" value="'+esc(l.precio)+'" placeholder="$"></label>'+
+      '<span class="num mvs">'+$(num(l.cant)*num(l.precio))+'</span><button class="rm" data-act="rmMovItem" data-i="'+i+'" aria-label="Quitar">×</button></div>'; }).join('');
+  return '<div class="stack" style="gap:8px"><h3>Productos de materia prima</h3>'+
+    '<p class="muted" style="margin:0;font-size:13px">Cargá cada ítem como figura en el comprobante. Al guardar, el precio de cada materia prima se actualiza solo.</p>'+
+    (lineas?'<div class="lines">'+lineas+'</div><div class="row between" style="font-size:14px"><span class="muted">Suma de los ítems</span><b class="num">'+$(sum(d.items,l=>num(l.cant)*num(l.precio)))+'</b></div>':'')+
+    (sinLista?'<div class="note">La lista de materia prima todavía no está activada para el local. Avisale a Gaba.</div>':
+    '<div class="search">'+svg('search')+'<input class="f" id="movq" data-sq="1" placeholder="Buscar materia prima: harina, azúcar, chocolate…" value="'+esc(SH.q||'')+'" autocomplete="off"></div>'+
+    (res.length?'<div class="results">'+res.map(i=>'<button data-act="addMovItem" data-id="'+i.id+'"><span>'+esc(i.nombre)+'</span><span class="muted">'+esc(i.presentacion?fmtCant(i.presentacion,i.unidad):(i.cat||''))+'</span></button>').join('')+'</div>':(q.length>=2?'<p class="muted" style="margin:0;font-size:13px">No encontré esa materia prima. Tiene que estar cargada en Costos → Insumos.</p>':'')))+'</div>';
+}
+async function aplicarPreciosFactura(d){
+  const its = (d.items||[]).filter(l=>l.insumoId && num(l.precio)>0); if(!its.length) return;
+  const f = d.fecha||today();
+  if(SECTOR==='todo'){ let n=0;
+    its.forEach(l=>{ const ins=S.insumos[l.insumoId]; if(!ins) return; if((ins.precioFecha||'') > f) return; if(num(ins.precio)===num(l.precio)) return;
+      n++; save('insumos', Object.assign({}, ins, {precioAnterior: ins.precio||null, precio: num(l.precio), precioFecha: f, proveedor: d.proveedor})); });
+    if(n) toast(n+(n===1?' precio de materia prima actualizado':' precios de materia prima actualizados')); return; }
+  const { data, error } = await sb.rpc('precios_desde_factura', {p_items: its.map(l=>({id:l.insumoId, precio:num(l.precio)})), p_proveedor: d.proveedor, p_fecha: f});
+  if(error){ console.warn(error); toast('El comprobante se guardó, pero no se pudieron actualizar los precios'); return; }
+  if(data) toast(data+(data===1?' precio de materia prima actualizado':' precios de materia prima actualizados'));
+}
 SHEETS.mov = function(){
   const d = SH.draft; const local = SECTOR==='local';
   const provs = [...new Set(Object.values(S.proveedores).map(p=>p.nombre).concat(movsArr().map(m=>m.proveedor)).filter(Boolean))].sort();
-  const autoTot = num(d.neto)+num(d.iva)+num(d.percepciones);
+  const netoItems = sum(d.items||[], l=>num(l.cant)*num(l.precio));
+  const autoTot = (d.neto===''||d.neto==null ? netoItems : num(d.neto))+num(d.iva)+num(d.percepciones);
   const body = '<div class="chips">'+TIPOS_MOV.filter(t=>!local||t==='FACTURA'||t==='REMITO').map(t=>'<button class="chip" data-act="movTipo" data-v="'+t+'" aria-pressed="'+(d.tipo===t)+'">'+TIPO_LBL[t]+'</button>').join('')+'</div>'+
     fld('proveedor','Proveedor',d.proveedor,'text','list="provs" autocomplete="off"')+'<datalist id="provs">'+provs.map(p=>'<option value="'+esc(p)+'">').join('')+'</datalist>'+
     '<div class="grid2">'+fld('fecha','Fecha',d.fecha,'date')+fld('numero',d.tipo==='PAGO'?'Referencia':'N° de comprobante',d.numero,'text',d.tipo==='PAGO'?'placeholder="Ej: a cuenta, transferencia"':'')+'</div>'+
+    (['FACTURA','REMITO'].includes(d.tipo) ? movItemsBlock(d) : '')+
     (d.tipo==='PAGO' ? fld('total','Importe pagado ($)',d.total||'','number') :
-      '<div class="grid3">'+fld('neto','Neto ($)',d.neto||'','number')+fld('iva','IVA ($)',d.iva||'','number')+fld('percepciones','Percep. ($)',d.percepciones||'','number')+'</div>'+
+      '<div class="grid3">'+fld('neto','Neto ($)',d.neto||'','number',netoItems?'placeholder="'+esc(String(Math.round(netoItems*100)/100))+'"':'')+fld('iva','IVA ($)',d.iva||'','number')+fld('percepciones','Percep. ($)',d.percepciones||'','number')+'</div>'+
       fld('total','Total ($)',d.total||'','number','placeholder="'+(autoTot?esc(String(autoTot)):'Si lo dejás vacío, suma neto + IVA + percepciones')+'"'))+
     fld('rubro','Rubro',d.rubro,'text','list="rubros2"')+'<datalist id="rubros2">'+RUBROS_DEF().map(r=>'<option value="'+esc(r)+'">').join('')+'</datalist>'+
     '<label class="lb">Detalle<textarea class="f" data-d="descripcion" id="d-descripcion" rows="2" placeholder="Qué vino, observaciones">'+esc(d.descripcion||'')+'</textarea></label>'+
@@ -1697,13 +1726,18 @@ const A = {
   nuevoMov: el => openSheet('mov', {tipo:(el&&el.dataset&&el.dataset.tipo)||'FACTURA', proveedor:(el&&el.dataset&&el.dataset.prov)||'', fecha:today(), numero:'', rubro:'', descripcion:'', neto:'', iva:'', percepciones:'', total:''}, {volver: SH&&SH.type==='prov' ? clone(SH.draft) : null}),
   editMov: el => { const m=S.movprov[el.dataset.id]; if(m) openSheet('mov', clone(m), {volver: SH&&SH.type==='prov' ? clone(SH.draft) : null}); },
   movTipo: el => { SH.draft.tipo = el.dataset.v; renderSheet(); },
+  addMovItem: el => { const i=S.insumos[el.dataset.id]; if(!i) return; const d=SH.draft; d.items=d.items||[]; d.items.push({insumoId:i.id, nombre:i.nombre, cant:1, precio:''}); SH.q=''; renderSheet(); setTimeout(()=>{ const x=document.getElementById('mi-p-'+(d.items.length-1)); if(x) x.focus(); }, 30); },
+  rmMovItem: el => { SH.draft.items.splice(+el.dataset.i,1); renderSheet(); },
   saveMov: () => { const d=SH.draft; if(!(d.proveedor||'').trim()){ toast('Elegí el proveedor'); return; }
+    d.items = (d.items||[]).filter(l=>l.nombre).map(l=>Object.assign({}, l, {cant:num(l.cant)||1, precio:num(l.precio)}));
+    if(!['FACTURA','REMITO'].includes(d.tipo)) d.items = [];
+    if(d.items.length && (d.neto===''||d.neto==null)) d.neto = Math.round(sum(d.items,l=>l.cant*l.precio)*100)/100;
     ['neto','iva','percepciones','total'].forEach(k=>{ d[k] = d[k]===''||d[k]==null ? '' : num(d[k]); });
     if(d.total==='' ) d.total = num(d.neto)+num(d.iva)+num(d.percepciones);
     if(!num(d.total)){ toast('Poné el importe'); return; }
     d.proveedor = d.proveedor.trim(); if(!d.creado) d.creado = today();
     const pk = 'pv-'+slug(d.proveedor); if(SECTOR==='todo' && !S.proveedores[pk]) save('proveedores', {id:pk, nombre:d.proveedor, rubro:d.rubro||'', creado:today()});
-    save('movprov', d); const v = SH.volver; closeSheet(); toast(TIPO_LBL[d.tipo]+' guardado'+(d.tipo==='PAGO'?'':'')); if(v) openSheet('prov', v); },
+    save('movprov', d); const v = SH.volver; closeSheet(); toast(TIPO_LBL[d.tipo]+' guardado'+(d.tipo==='PAGO'?'':'')); if(v) openSheet('prov', v); aplicarPreciosFactura(d); },
   importarSheet: () => openSheet('importar', {}),
   leerPlanilla: async el => { const f = el.files && el.files[0]; if(!f) return; SH.draft = {archivo:f.name, leyendo:true}; renderSheet();
     if(!(await cargarXLSX())){ SH.draft={}; renderSheet(); toast('No se pudo preparar el lector de Excel. Revisá la conexión.'); return; }
@@ -1961,6 +1995,7 @@ document.addEventListener('input', ev => {
   if(el.dataset.it!=null){ d.items[+el.dataset.it][el.dataset.k] = el.value; renderSheetSoft(); return; }
   if(el.dataset.pg!=null){ d.pagos[+el.dataset.pg][el.dataset.k] = el.value; renderSheetSoft(); return; }
   if(el.dataset.oi!=null){ d.items[+el.dataset.oi].cant = el.value; return; }
+  if(el.dataset.mi!=null){ d.items[+el.dataset.mi][el.dataset.k] = el.value; renderSheetSoft(); return; }
   if(el.dataset.ing!=null){ d.ingredientes[+el.dataset.ing].cant = el.value; renderSheetSoft(); return; }
   if(el.id==='cc-monto'){ SH.ccMonto = el.value; return; }
   if(el.dataset.sq){ SH.q = el.value; SH.sel = 0; if(el.id==='itq' && document.getElementById('itq-res')){ pintarResultados(); return; } renderSheet(); return; }
