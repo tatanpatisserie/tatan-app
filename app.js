@@ -1217,6 +1217,7 @@ async function compartirJPG(blob, nombre, ok){
 SHEETS.cliente = function(){
   const d = SH.draft; const ps = d.id? pedidosArr().filter(p=>p.clienteId===d.id && (SECTOR!=='local' || p.canal!=='Mayorista')).sort(byEntrega).reverse() : [];
   const body = '<div class="grid2">'+fld('nombre','Nombre',d.nombre)+fld('telefono','Teléfono',d.telefono,'tel')+'</div>'+sel('tipo','Tipo',d.tipo||'Particular',['Particular','Mayorista','Empresa','Cuenta corriente'])+
+    (['Mayorista','Empresa'].includes(d.tipo)? fld('razonSocial','Razón social',d.razonSocial||'','text','placeholder="Como figura en AFIP"')+'<div class="grid2">'+fld('cuit','CUIT',d.cuit||'','text','inputmode="numeric" placeholder="30-12345678-9"')+sel('condIva','Condición frente al IVA',d.condIva||'Responsable inscripto',['Responsable inscripto','Monotributo','Exento','Consumidor final'])+'</div>'+fld('domicilio','Domicilio fiscal',d.domicilio||'') : '')+
     '<label class="lb">Notas (gustos, alergias, cumpleaños)<textarea class="f" id="d-notas" data-d="notas">'+esc(d.notas||'')+'</textarea></label>'+
     (d.id? '<div class="tiles" style="grid-template-columns:repeat(3,1fr)"><div class="tile"><span class="k">Pedidos</span><span class="v num">'+ps.filter(p=>p.estado!=='cancelado').length+'</span></div><div class="tile"><span class="k">Comprado</span><span class="v num">'+$(sum(ps.filter(p=>p.estado!=='cancelado'),p=>totPedido(p).total))+'</span></div><div class="tile"><span class="k">Debe</span><span class="v num">'+$(saldoCliente(d.id))+'</span></div></div>'+
       ccBox(d)+((d.tipo==='Cuenta corriente' || saldoCliente(d.id)>0.5)? estadoCuentaBox(d) : '')+
@@ -1873,7 +1874,7 @@ const A = {
     toast(prev.length+' gastos copiados'); },
   nuevoCliente: () => openSheet('cliente', {nombre:'', telefono:'', tipo:'Particular', notas:''}),
   verCliente: el => { const c=S.clientes[el.dataset.id]; if(c) openSheet('cliente', clone(c)); },
-  saveCliente: () => { const d=SH.draft; if(!(d.nombre||'').trim()){ toast('Poné el nombre'); return; } save('clientes', d); closeSheet(); toast('Cliente guardado'); },
+  saveCliente: () => { const d=SH.draft; if(!(d.nombre||'').trim()){ toast('Poné el nombre'); return; } if(['Mayorista','Empresa'].includes(d.tipo) && !d.condIva) d.condIva='Responsable inscripto'; save('clientes', d); closeSheet(); toast('Cliente guardado'); },
   pedidoParaCliente: () => { const c=SH.draft; if(c.tipo==='Mayorista'){ openSheet('pedMay', nuevoPedido({clienteNombre:c.nombre, clienteId:c.id, canal:'Mayorista', remito:'', iva:false})); return; } openSheet('pedido', nuevoPedido({clienteNombre:c.nombre, telefono:c.telefono||'', clienteId:c.id, canal:'WhatsApp', cuentaCorriente: c.tipo==='Cuenta corriente'})); },
   nuevaReceta: () => openSheet('receta', {nombre:'', rinde:'', unidadRinde:'unidades', minutos:'', extra:'', ingredientes:[], notas:''}),
   editReceta: el => { const r=S.recetas[el.dataset.id]; if(r) openSheet('receta', clone(r)); },
