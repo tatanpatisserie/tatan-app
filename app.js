@@ -537,7 +537,7 @@ R.pedidos = function(){
     <div class="search">${svg('search')}<input class="f" id="qped" placeholder="${may?'Buscar por cliente, remito o producto':'Buscar por cliente o producto'}" value="${esc(U.q)}" data-bind="q"></div>
     <div class="chips">${chip('activos','Activos')}${chip('deben','Deben plata')}${chip('entregados','Entregados')}${chip('todos','Todos')}${fe?chip('cantidad','Cantidad'):''}
       ${may||fe?'':'<select class="chip" id="fcanal" data-bind="fCanal" aria-label="Canal"><option value="">Todos los canales</option>'+CANALES_MIN.map(c=>'<option'+(U.fCanal===c?' selected':'')+'>'+c+'</option>').join('')+'</select>'}</div>
-    ${feCant!=null ? feCant : groups.length ? groups.map(g=>'<div class="group-h">'+esc(gname(g.k))+'</div><div class="list">'+g.items.map(pedidoItem).join('')+'</div>').join('') + (totalArr>lim?'<button class="btn" data-act="masPed">Ver más ('+(totalArr-lim).toLocaleString('es-AR')+')</button>':'') :
+    ${feCant!=null ? feCant : groups.length ? groups.map(g=>'<div class="group-h">'+esc(gname(g.k))+'</div><div class="list">'+g.items.map(p=>f==='activos'?'<div class="itemwrap">'+pedidoItem(p)+'<button class="btn sm ent" data-act="entAsk" data-id="'+esc(p.id)+'">Entregado</button></div>':pedidoItem(p)).join('')+'</div>').join('') + (totalArr>lim?'<button class="btn" data-act="masPed">Ver más ('+(totalArr-lim).toLocaleString('es-AR')+')</button>':'') :
       (may ? '<div class="card empty"><h2>No hay pedidos mayoristas acá</h2><p>Cargá el pedido con el cliente, el remito y los productos con el precio de la lista mayorista.</p><button class="btn pri" data-act="nuevoMay">Nuevo pedido mayorista</button></div>'
            : fe ? '<div class="card empty"><h2>No hay pedidos de fecha especial acá</h2><p>Cuando carguemos los pedidos de fechas especiales los vas a ver en esta lista.</p></div>'
            : '<div class="card empty"><h2>No hay pedidos acá</h2><p>Cargá un pedido con fecha de entrega, seña y saldo. Lo ves en Inicio y en la lista del día.</p><button class="btn pri" data-act="nuevoPedido">Nuevo pedido</button></div>')}
@@ -1086,6 +1086,13 @@ async function bajarPresuJPG(d){
   const url = URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=nombre; document.body.appendChild(a); a.click(); setTimeout(()=>{ a.remove(); URL.revokeObjectURL(url); }, 4000);
   toast('Presupuesto descargado');
 }
+SHEETS.entConf = function(){
+  const p = S.pedidos[SH.draft.id]; if(!p) return { title:'Pedido', body:'<p class="muted">Este pedido ya no está.</p>', foot:'<span class="grow"></span><button class="btn" data-act="close">Cerrar</button>' };
+  const t = totPedido(p); const res = (p.items||[]).map(l=>(num(l.cant)!==1?l.cant+'× ':'')+esc(l.nombre)).join(', ');
+  return { title:'¿Se entregó el pedido?', body:'<p style="margin:0;font-size:16px">¿El pedido de <b>'+esc(p.clienteNombre||'Sin nombre')+'</b> fue entregado?</p><div class="card" style="font-size:14px">'+res+'<div class="muted" style="margin-top:6px">'+fdateShort(p.entrega)+' · '+$(t.aCobrar)+'</div></div>'+
+      (t.saldo>0.5?'<div class="note">Ojo: todavía tiene saldo pendiente de <b>'+$(t.saldo)+'</b>.</div>':''),
+    foot:'<button class="btn" data-act="close">No</button><span class="grow"></span><button class="btn pri" data-act="entSi" data-id="'+esc(p.id)+'">Sí, fue entregado</button>' };
+};
 SHEETS.texto = function(){ return { title:'Copiá este texto', body:'<p class="muted" style="margin:0">No se pudo copiar solo. Mantené apretado el texto para seleccionarlo.</p><textarea class="f" id="txtcopy" style="min-height:300px" readonly>'+esc(SH.draft.text)+'</textarea>', foot:'<span class="grow"></span><button class="btn pri" data-act="close">Listo</button>' }; };
 SHEETS.gasto = function(){
   const d = SH.draft;
@@ -1692,6 +1699,8 @@ const A = {
   nuevoFE: () => openSheet('pedido', nuevoPedido({canal:'Fecha especial'})),
   pedIva: el => { SH.draft.iva = el.dataset.v==='1'; renderSheet(); },
   ventaLocal: () => openSheet('pedido', nuevoPedido({canal:'Local', estado:'entregado', clienteNombre:'Mostrador'}), {venta:true}),
+  entAsk: el => openSheet('entConf', {id: el.dataset.id}),
+  entSi: async el => { const p=S.pedidos[el.dataset.id]; if(!p) return; closeSheet(); await save('pedidos', Object.assign({}, p, {estado:'entregado'})); toast('Pedido de '+(p.clienteNombre||'')+' marcado como entregado'); },
   editPedido: el => { const p=S.pedidos[el.dataset.id]; if(p) openSheet(p.canal==='Mayorista'?'pedMay':'pedido', clone(p)); },
   abrirPedido: el => { const p=S.pedidos[el.dataset.id]; if(p) openSheet(p.canal==='Mayorista'?'pedMay':'pedido', clone(p)); },
   dupPedido: () => { const d=clone(SH.draft); delete d.id; d.pagos=[]; d.estado='pendiente'; d.entrega=today(); delete d.origen; if(d.canal==='Mayorista'){ d.remito=''; d.factura=''; } openSheet(d.canal==='Mayorista'?'pedMay':'pedido', d); toast('Copia lista para editar'); },
