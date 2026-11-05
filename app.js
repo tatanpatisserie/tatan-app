@@ -853,8 +853,8 @@ R.produccion = function(){
   return `<div class="stack">
     <div class="row between"><h1>Producción</h1>${SECTOR!=='cocina'?`<div class="row"><button class="btn sm" data-act="ordenManual">${svg('plus')}Orden</button><button class="btn pri sm" data-act="armarProd">Armar con faltantes${falt?' ('+falt+')':''}</button></div>`:''}</div>
     <p class="muted" style="margin:0">${SECTOR==='cocina'?'Tildá cada cosa cuando esté lista. El local lo ve al instante.':'Hay una producción por día. La cocina tilda lo que va terminando. El stock no cambia solo: se actualiza a mano desde Stock.'}</p>
-    ${bar}
-      ${ords.length? '<div class="stack">'+ords.map(ordCard).join('')+'</div>' : '<div class="card empty"><p>No hay producción para este día.'+(SECTOR!=='cocina'?' Cargala con “Orden” o con “Armar con faltantes”.':'')+'</p></div>'}
+    <div class="prodday stack">${bar}
+      ${ords.length? '<div class="stack">'+ords.map(ordCard).join('')+'</div>' : '<div class="card empty"><p>No hay producción para este día.'+(SECTOR!=='cocina'?' Cargala con “Orden” o con “Armar con faltantes”.':'')+'</p></div>'}</div>
     ${prox.length?'<div class="sec"><div class="sec-h"><h2>Próximas producciones</h2></div><div class="chips">'+prox.map(f=>'<button class="chip" data-act="pIr" data-v="'+f+'">'+esc(fdateShort(f))+'</button>').join('')+'</div></div>':''}
   </div>`;
 };
