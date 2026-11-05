@@ -914,7 +914,7 @@ function clienteFields(d){
   return '<datalist id="dl-cli">'+opts+'</datalist><div class="grid2">'+fld('telefono','Teléfono',d.telefono,'tel','placeholder="Ej: 223 555 1234"')+fld('clienteNombre','Cliente',d.clienteNombre,'text','list="dl-cli" autocomplete="off"')+'</div>'+
     (conocido?'<div class="muted" style="font-size:12.5px;margin-top:-6px">Cliente ya cargado con ese teléfono.</div>':'')+
     (cc ? '<div class="note">Va a la cuenta corriente'+(cEx?' de <b>'+esc(cEx.nombre)+'</b>, que hoy debe <b>'+$(saldoCliente(cEx.id))+'</b>':'')+'. No hace falta cargar el pago: se cobra después desde Más → Clientes.</div>' : '')+
-    (SH.type==='pedido' && d.canal==='Fecha especial' ? '<label class="ckline"><input type="checkbox" data-act="tglCC" '+(d.cuentaCorriente?'checked':'')+'> Cuenta corriente (empleados, familia o dueñas)</label>' : '')+
+    (SH.type==='pedido' && d.canal==='Fecha especial' ? '<label class="ckline"><input type="checkbox" data-act="tglCC" '+(d.cuentaCorriente?'checked':'')+'> Cuenta corriente</label>' : '')+
     (SH.type==='pedido' ? '<label class="ckline"><input type="checkbox" data-act="tglRetira" '+(d.retiraOtro?'checked':'')+'> Retira otra persona</label>'+(d.retiraOtro?fld('retiraNombre','Nombre de quien retira',d.retiraNombre||'','text','autocomplete="off"'):'') : '');
 }
 function findOrCreateCliente(d){
