@@ -486,7 +486,7 @@ R.inicio = function(){
 const byEntrega = (a,b) => ((a.entrega||'')+(a.hora||'')).localeCompare((b.entrega||'')+(b.hora||''));
 const ESTADOS = {pendiente:['Pendiente','p-neu'], produccion:['En producción','p-pis'], listo:['Listo','p-acc'], entregado:['Entregado','p-ok'], cancelado:['Cancelado','p-bad']};
 const CANALES = ['Pedido particular','Local','Evento','Fecha especial','Mayorista','Empresa','Cuenta corriente'];
-const CANALES_MIN = ['Local','WhatsApp','Cuenta corriente'];
+const CANALES_MIN = ['Local','WhatsApp']; // la cuenta corriente es un casillero aparte
 const MEDIOS = ['Efectivo','Transferencia','QR Galicia','Mercado Pago','Tarjeta','Cuenta corriente'];
 function saldoPill(p){ const t = totPedido(p); if(t.aCobrar<=0) return ''; if(t.saldo<=0.5) return '<span class="pill p-ok">Pagado</span>'; if(t.pagado>0) return '<span class="pill p-warn">Debe '+$(t.saldo)+'</span>'; return '<span class="pill p-bad">Sin seña</span>'; }
 function pedidoItem(p){
@@ -495,7 +495,7 @@ function pedidoItem(p){
   return '<button class="item" data-act="editPedido" data-id="'+p.id+'">'+
     '<div class="datechip'+(p.entrega===today()?' today':'')+'">'+(d?'<span>'+DIAS[d.getDay()]+'</span><b>'+d.getDate()+'</b>':'<b>?</b>')+'</div>'+
     '<div class="main"><span class="t">'+esc(p.clienteNombre||'Sin nombre')+(p.remito?' <span class="muted" style="font-weight:500">· Rto '+esc(p.remito)+'</span>':'')+(p.retiraOtro&&p.retiraNombre?' <span class="muted" style="font-weight:500">· retira '+esc(p.retiraNombre)+'</span>':'')+(p.hora?' <span class="muted" style="font-weight:500">· '+esc(p.hora)+'</span>':'')+'</span><span class="s">'+esc(resumen||'Sin productos')+'</span>'+
-    '<span class="row" style="gap:5px"><span class="pill '+e[1]+'">'+e[0]+'</span>'+progresoPill(p)+(p.canal&&p.canal!=='Pedido particular'&&p.canal!=='Mayorista'?'<span class="pill p-neu">'+esc(p.canal)+'</span>':'')+(p.canal==='Fecha especial'&&p.cuentaCorriente?'<span class="pill p-acc">Cuenta corriente</span>':'')+(p.iva?'<span class="pill p-neu">Con IVA</span>':'')+'</span></div>'+
+    '<span class="row" style="gap:5px"><span class="pill '+e[1]+'">'+e[0]+'</span>'+progresoPill(p)+(p.canal&&p.canal!=='Pedido particular'&&p.canal!=='Mayorista'?'<span class="pill p-neu">'+esc(p.canal)+'</span>':'')+(p.cuentaCorriente&&p.canal!=='Cuenta corriente'?'<span class="pill p-acc">Cuenta corriente</span>':'')+(p.iva?'<span class="pill p-neu">Con IVA</span>':'')+'</span></div>'+
     '<div class="end"><span class="num" style="font-weight:700">'+$(t.aCobrar)+'</span>'+saldoPill(p)+'</div></button>';
 }
 /* ===== PEDIDOS ===== */
@@ -709,7 +709,7 @@ let _ndPend=false;
 new MutationObserver(()=>{ if(_ndPend) return; _ndPend=true; requestAnimationFrame(()=>{ _ndPend=false; arreglarDoughy(document); }); }).observe(document.documentElement, {childList:true, subtree:true, characterData:true});
 /* ===== ESTADÍSTICAS ===== */
 function canalStat(p){ if(p.canal==='Mayorista') return 'Mayoristas'; if(p.canal==='Fecha especial') return 'Fecha especial'; if(p.origen==='bistrosoft') return 'Mostrador (Bistrosoft)';
-  if(p.canal==='Local') return 'Local'; if(p.canal==='WhatsApp') return 'WhatsApp'; if(p.canal==='Cuenta corriente') return 'Cuenta corriente'; return 'Pedidos de planilla (sin canal)'; }
+  if(p.canal==='Cuenta corriente' || p.cuentaCorriente) return 'Cuenta corriente'; if(p.canal==='Local') return 'Local'; if(p.canal==='WhatsApp') return 'WhatsApp'; return 'Pedidos de planilla (sin canal)'; }
 const CANAL_ORDEN = ['Local','WhatsApp','Cuenta corriente','Mayoristas','Fecha especial','Mostrador (Bistrosoft)','Pedidos de planilla (sin canal)'];
 function statsLocal(){
   const mes = U.mes; const meses = []; for(let i=5;i>=0;i--){ const d=new Date(mes+'-15T12:00:00'); d.setMonth(d.getMonth()-i); meses.push(d.toISOString().slice(0,7)); }
@@ -907,7 +907,7 @@ function itemsEditor(items){
 }
 const telKey = t => { const x=String(t||'').replace(/\D/g,''); return x.length>=8 ? x.slice(-8) : ''; };
 function clientePorTel(tel){ const k=telKey(tel); if(!k) return null; return Object.values(S.clientes).find(c=>telKey(c.telefono)===k) || null; }
-const esCC = d => d.canal==='Cuenta corriente' || (d.canal==='Fecha especial' && !!d.cuentaCorriente);
+const esCC = d => d.canal==='Cuenta corriente' || (d.canal!=='Mayorista' && !!d.cuentaCorriente);
 function clienteFields(d){
   const cc = esCC(d);
   const opts = Object.values(S.clientes).filter(c=>!cc || c.tipo==='Cuenta corriente').map(c=>'<option value="'+esc(c.nombre)+'">').join('');
@@ -916,7 +916,7 @@ function clienteFields(d){
   return '<datalist id="dl-cli">'+opts+'</datalist><div class="grid2">'+fld('telefono','Teléfono',d.telefono,'tel','placeholder="Ej: 223 555 1234"')+fld('clienteNombre','Cliente',d.clienteNombre,'text','list="dl-cli" autocomplete="off"')+'</div>'+
     (conocido?'<div class="muted" style="font-size:12.5px;margin-top:-6px">Cliente ya cargado con ese teléfono.</div>':'')+
     (cc ? '<div class="note">Va a la cuenta corriente'+(cEx?' de <b>'+esc(cEx.nombre)+'</b>, que hoy debe <b>'+$(saldoCliente(cEx.id))+'</b>':'')+'. No hace falta cargar el pago: se cobra después desde Más → Clientes.</div>' : '')+
-    (SH.type==='pedido' && d.canal==='Fecha especial' ? '<label class="ckline"><input type="checkbox" data-act="tglCC" '+(d.cuentaCorriente?'checked':'')+'> Cuenta corriente</label>' : '')+
+    (SH.type==='pedido' ? '<label class="ckline"><input type="checkbox" data-act="tglCC" '+(esCC(d)?'checked':'')+'> Cuenta corriente</label>' : '')+
     (SH.type==='pedido' ? '<label class="ckline"><input type="checkbox" data-act="tglRetira" '+(d.retiraOtro?'checked':'')+'> Retira otra persona</label>'+(d.retiraOtro?fld('retiraNombre','Nombre de quien retira',d.retiraNombre||'','text','autocomplete="off"'):'') : '');
 }
 function findOrCreateCliente(d){
@@ -952,7 +952,7 @@ const SHEETS = {};
 SHEETS.pedido = function(){
   const d = SH.draft; const n = neg();
   const body = clienteFields(d)+
-    '<div class="grid3">'+sel('canal','Canal',d.canal,(CANALES_MIN.includes(d.canal)||d.canal==='Fecha especial'&&false)?CANALES_MIN:CANALES_MIN.concat(d.canal?[d.canal]:[]))+fld('entrega','Fecha de entrega',d.entrega,'date')+fld('hora','Hora',d.hora,'time')+'</div>'+
+    '<div class="grid3">'+sel('canal','Canal de venta',d.canal==='Cuenta corriente'?'':d.canal,(d.canal==='Fecha especial'?['Fecha especial'].concat(CANALES_MIN):CANALES_MIN.includes(d.canal)||d.canal==='Cuenta corriente'||!d.canal?CANALES_MIN:CANALES_MIN.concat([d.canal])))+fld('entrega','Fecha de entrega',d.entrega,'date')+fld('hora','Hora',d.hora,'time')+'</div>'+
     sel('estado','Estado',d.estado,Object.entries(ESTADOS).map(([k,v])=>[k,v[0]]))+
     bloquePedido(d, {notas:'notas', notasLbl:'Notas (sabores, deco, dirección de entrega)'})+
     delBlock('este pedido');
@@ -1695,7 +1695,7 @@ const A = {
   copiarCC: () => { const d=SH.draft; const n=neg(); const pend=pendientesCliente(d.id);
     copy([n.nombre+' · Resumen de cuenta', 'Cliente: '+d.nombre, '', ...pend.map(p=>'• '+fdateShort(p.entrega)+': '+(p.items||[]).map(l=>(num(l.cant)!==1?l.cant+'× ':'')+l.nombre).join(', ')+' — saldo '+$(totPedido(p).saldo)), '', 'Total a pagar: '+$(saldoCliente(d.id))].join('\n')); },
   pedDesc: el => { const v=num(el.dataset.v); SH.draft.descPct = v||''; if(v) SH.draft.descuento=''; renderSheet(); },
-  tglCC: () => { SH.draft.cuentaCorriente = !SH.draft.cuentaCorriente; renderSheet(); },
+  tglCC: () => { const d=SH.draft; const on=!esCC(d); d.cuentaCorriente=on; if(!on && d.canal==='Cuenta corriente') d.canal='WhatsApp'; renderSheet(); },
   tglRetira: el => { SH.draft.retiraOtro = !SH.draft.retiraOtro; if(!SH.draft.retiraOtro) SH.draft.retiraNombre=''; renderSheet(); if(SH.draft.retiraOtro) setTimeout(()=>{ const x=document.getElementById('d-retiraNombre'); if(x) x.focus(); },30); },
   pedVista: el => { U.pedVista = el.dataset.v; render(); },
   nuevoFE: () => openSheet('pedido', nuevoPedido({canal:'Fecha especial'})),
@@ -1745,7 +1745,7 @@ const A = {
   nuevoCliente: () => openSheet('cliente', {nombre:'', telefono:'', tipo:'Particular', notas:''}),
   verCliente: el => { const c=S.clientes[el.dataset.id]; if(c) openSheet('cliente', clone(c)); },
   saveCliente: () => { const d=SH.draft; if(!(d.nombre||'').trim()){ toast('Poné el nombre'); return; } save('clientes', d); closeSheet(); toast('Cliente guardado'); },
-  pedidoParaCliente: () => { const c=SH.draft; if(c.tipo==='Mayorista'){ openSheet('pedMay', nuevoPedido({clienteNombre:c.nombre, clienteId:c.id, canal:'Mayorista', remito:'', iva:false})); return; } openSheet('pedido', nuevoPedido({clienteNombre:c.nombre, telefono:c.telefono||'', clienteId:c.id, canal: c.tipo==='Cuenta corriente'?'Cuenta corriente':'WhatsApp'})); },
+  pedidoParaCliente: () => { const c=SH.draft; if(c.tipo==='Mayorista'){ openSheet('pedMay', nuevoPedido({clienteNombre:c.nombre, clienteId:c.id, canal:'Mayorista', remito:'', iva:false})); return; } openSheet('pedido', nuevoPedido({clienteNombre:c.nombre, telefono:c.telefono||'', clienteId:c.id, canal:'WhatsApp', cuentaCorriente: c.tipo==='Cuenta corriente'})); },
   nuevaReceta: () => openSheet('receta', {nombre:'', rinde:'', unidadRinde:'unidades', minutos:'', extra:'', ingredientes:[], notas:''}),
   editReceta: el => { const r=S.recetas[el.dataset.id]; if(r) openSheet('receta', clone(r)); },
   addIng: el => { SH.draft.ingredientes = SH.draft.ingredientes||[]; SH.draft.ingredientes.push({insumoId:el.dataset.id, cant:''}); SH.q=''; renderSheet(); const i=SH.draft.ingredientes.length-1; const inp=document.getElementById('ing-'+i); if(inp) inp.focus(); },
