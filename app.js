@@ -22,6 +22,7 @@ const norm = s => String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/
 const clone = o => JSON.parse(JSON.stringify(o));
 const sum = (a,f) => a.reduce((s,x)=>s+(f?f(x):x),0);
 const icon = {
+  calendar:'<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>',
   home:'<path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/>',
   bag:'<path d="M5 8h14l-1 12H6z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/>',
   doc:'<path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5M10 13h6M10 17h6"/>',
@@ -516,7 +517,7 @@ function cantidadesFE(arr, fe, todo){
     (fechas.length>1?'<div class="group-h">Total de todas las fechas</div><div class="card">'+tabla(tot)+'</div>':'');
 }
 R.pedidos = function(){
-  const f = U.fPed, q = norm(U.q);
+  const f = (U.fPed==='cantidad' && U.listaTipo!=='fe') ? 'activos' : U.fPed, q = norm(U.q);
   let arr = pedidosArr();
   if(f==='activos') arr = arr.filter(p=>['pendiente','produccion','listo'].includes(p.estado||'pendiente'));
   if(f==='entregados') arr = arr.filter(p=>p.estado==='entregado');
@@ -529,10 +530,10 @@ R.pedidos = function(){
   // Período: minoristas por semana, fechas especiales por mes. Si buscás algo, busca en todas las fechas.
   const sIni = U.lSem || lunesDe(today()), sFin = addDays(sIni,6), mes = U.lMes || today().slice(0,7);
   const per = fe ? '<div class="monthbar"><button class="btn" data-act="lNav" data-n="-1" aria-label="Mes anterior">‹</button><div style="text-align:center"><div class="eyebrow">Fechas especiales del mes</div><h2>'+esc(mesLabel(mes))+'</h2></div><button class="btn" data-act="lNav" data-n="1" aria-label="Mes siguiente">›</button></div>'
-    : '<div class="monthbar"><button class="btn" data-act="lNav" data-n="-7" aria-label="Semana anterior">‹</button><div style="text-align:center"><div class="eyebrow">Pedidos minoristas de la semana</div><h2>'+fdateShort(sIni).replace(/^\S+ /,'')+' al '+fdateShort(sFin).replace(/^\S+ /,'')+'</h2></div><button class="btn" data-act="lNav" data-n="7" aria-label="Semana siguiente">›</button></div>';
+    : '<div class="monthbar"><button class="btn" data-act="lNav" data-n="-7" aria-label="Semana anterior">‹</button><div style="text-align:center"><div class="eyebrow">Pedidos minoristas de la semana</div><div class="row" style="gap:8px;justify-content:center"><h2>'+fdateShort(sIni).replace(/^\S+ /,'')+' al '+fdateShort(sFin).replace(/^\S+ /,'')+'</h2><label class="calbtn" title="Elegir fecha">'+svg('calendar')+'<input type="date" data-chg="lSemPick" value="'+sIni+'" aria-label="Ir a otra fecha"></label></div></div><button class="btn" data-act="lNav" data-n="7" aria-label="Semana siguiente">›</button></div>';
   if(q) arr = arr.filter(p=> norm(p.clienteNombre+' '+(p.remito||'')+' '+(p.items||[]).map(l=>l.nombre).join(' ')+' '+(p.notas||'')).includes(q));
   else arr = arr.filter(p=> fe ? (p.entrega||'').startsWith(mes) : ((p.entrega||'')>=sIni && (p.entrega||'')<=sFin));
-  const feCant = f==='cantidad' ? cantidadesFE(arr, fe, true) : null;
+  const feCant = (fe && f==='cantidad') ? cantidadesFE(arr, fe, true) : null;
   arr.sort(byEntrega); if(f==='entregados'||f==='todos') arr.reverse();
   const totalArr = arr.length; const lim = U.pedLim||120; arr = arr.slice(0, lim);
   const groups = []; let cur=null;
@@ -544,7 +545,7 @@ R.pedidos = function(){
     <div class="subtabs"><button data-act="listaTipo" data-v="min" aria-pressed="${!fe}">Minoristas</button><button data-act="listaTipo" data-v="fe" aria-pressed="${fe}">Fechas especiales</button></div>
     ${q?'<div class="note">Buscando en todas las fechas.</div>':per}
     <div class="search">${svg('search')}<input class="f" id="qped" placeholder="${may?'Buscar por cliente, remito o producto':'Buscar por cliente o producto'}" value="${esc(U.q)}" data-bind="q"></div>
-    <div class="chips">${chip('activos','Activos')}${chip('deben','Deben plata')}${chip('entregados','Entregados')}${chip('todos','Todos')}${chip('cantidad','Cantidad')}
+    <div class="chips">${chip('activos','Activos')}${chip('deben','Deben plata')}${chip('entregados','Entregados')}${chip('todos','Todos')}${fe?chip('cantidad','Cantidad'):''}
       ${may||fe?'':'<select class="chip" id="fcanal" data-bind="fCanal" aria-label="Canal"><option value="">Todos los canales</option>'+CANALES_MIN.map(c=>'<option'+(U.fCanal===c?' selected':'')+'>'+c+'</option>').join('')+'</select>'}</div>
     ${feCant!=null ? feCant : groups.length ? groups.map(g=>'<div class="group-h">'+esc(gname(g.k))+'</div><div class="list">'+g.items.map(p=>f==='activos'?'<div class="itemwrap">'+pedidoItem(p)+'<button class="btn sm ent" data-act="entAsk" data-id="'+esc(p.id)+'">Entregado</button></div>':pedidoItem(p)).join('')+'</div>').join('') + (totalArr>lim?'<button class="btn" data-act="masPed">Ver más ('+(totalArr-lim).toLocaleString('es-AR')+')</button>':'') :
       (may ? '<div class="card empty"><h2>No hay pedidos mayoristas acá</h2><p>Cargá el pedido con el cliente, el remito y los productos con el precio de la lista mayorista.</p><button class="btn pri" data-act="nuevoMay">Nuevo pedido mayorista</button></div>'
@@ -1693,6 +1694,7 @@ const A = {
     closeSheet(); toast('Borrado'); },
   nuevoPedido: () => openSheet('pedido', nuevoPedido({canal:'WhatsApp'})),
   nuevoMay: () => openSheet('pedMay', nuevoPedido({canal:'Mayorista', remito:'', iva:false, entrega: today()})),
+  lSemPick: el => { if(el.value){ U.lSem = lunesDe(el.value); U.pedLim=120; render(); } },
   lNav: el => { const n=+el.dataset.n; if(U.listaTipo==='fe'){ const d=new Date((U.lMes||today().slice(0,7))+'-15T12:00:00'); d.setMonth(d.getMonth()+n); U.lMes=d.toISOString().slice(0,7); } else U.lSem = addDays(U.lSem||lunesDe(today()), n); U.pedLim=120; render(); },
   listaTipo: el => { U.listaTipo = el.dataset.v; U.pedLim = 120; render(); },
   pedTipo: el => { U.pedTipo = el.dataset.v; U.pedLim = 120; render(); },
