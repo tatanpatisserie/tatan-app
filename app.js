@@ -832,7 +832,7 @@ R.produccion = function(){
       '<div class="row" style="justify-content:flex-end">'+(SECTOR!=='cocina'?'<button class="btn sm ghost" data-act="editOrden" data-id="'+o.id+'">Editar</button>':'')+(done?'<button class="btn sm" data-act="archivarOrden" data-id="'+o.id+'">Archivar</button>':'')+'</div></div>'; };
   return `<div class="stack">
     <div class="row between"><h1>Producción</h1>${SECTOR!=='cocina'?`<div class="row"><button class="btn sm" data-act="ordenManual">${svg('plus')}Orden</button><button class="btn pri sm" data-act="armarProd">Armar con faltantes${falt?' ('+falt+')':''}</button></div>`:''}</div>
-    <p class="muted" style="margin:0">${SECTOR==='cocina'?'Tildá cada cosa cuando esté lista. El local lo ve al instante.':'Hay una producción por día. La cocina tilda lo que va terminando y, si es un producto del stock, se suma solo.'}</p>
+    <p class="muted" style="margin:0">${SECTOR==='cocina'?'Tildá cada cosa cuando esté lista. El local lo ve al instante.':'Hay una producción por día. La cocina tilda lo que va terminando. El stock no cambia solo: se actualiza a mano desde Stock.'}</p>
     <div class="sec" style="margin-top:6px"><div class="sec-h"><h2>Producción por día</h2></div>
       ${ords.length? '<div class="stack">'+ords.map(ordCard).join('')+'</div>' : '<div class="card empty"><p>Todavía no hay producción armada.'+(SECTOR!=='cocina'?' Armala con “Armar con faltantes” o con “Orden”: todo lo de un mismo día queda en una sola producción.':'')+'</p></div>'}</div>
   </div>`;
@@ -845,7 +845,7 @@ R.stockpt = function(){
   const chip = (k,l) => '<button class="chip" data-act="fPT" data-v="'+k+'" aria-pressed="'+(f===k)+'">'+l+'</button>';
   return `<div class="stack">
     <div class="row between"><h1>Stock de producto terminado</h1><div class="row"><button class="btn sm" data-act="nuevoPT">${svg('plus')}Producto</button>${SECTOR!=='cocina'?`<button class="btn pri sm" data-act="armarProd">Armar producción${falt?' ('+falt+')':''}</button>`:''}</div></div>
-    <p class="muted" style="margin:0">Usá − y + para ajustar lo que hay. Cada producto con mínimo que llega a ese número entra solo en la próxima orden de producción.</p>
+    <p class="muted" style="margin:0">Usá − y + para ajustar lo que hay. Solo cambia cuando lo tocan acá. Lo que llega a su mínimo aparece en “Armar con faltantes”.</p>
     ${sinMin===Object.keys(S.stockpt).length && sinMin? '<div class="note">Todavía ningún producto tiene mínimo cargado. Tocá un producto y poné “mínimo” y “cantidad ideal” para que la producción se arme sola.</div>':''}
     <div class="search">${svg('search')}<input class="f" id="qpt" placeholder="Buscar producto" value="${esc(U.qPT||'')}" data-bind="qPT"></div>
     <div class="chips">${chip('','Todos')}${chip('alerta','Bajo mínimo')}${chip('Cocina','Cocina')}${chip('Local','Local')}</div>
@@ -1201,7 +1201,7 @@ SHEETS.orden = function(){
   const res = q.length>=2 ? Object.values(S.stockpt).filter(i=>norm(i.nombre).includes(q)).slice(0,8) : [];
   const body = '<div class="grid2">'+fld('fecha','Fecha',d.fecha,'date')+fld('armadaPor','La armó',d.armadaPor||'','text','placeholder="Ej: Martina"')+'</div>'+
     (ordDelDia(d.fecha, d.id)?'<div class="note">Ya hay una producción '+diaProd(d.fecha)+'. Lo que cargues acá se suma a esa.</div>':'')+
-    '<div class="stack" style="gap:8px"><h3>Qué producir</h3><div class="lines">'+((d.items||[]).map((x,i)=>'<div class="line" style="grid-template-columns:1fr 80px 30px"><div class="nm">'+esc(x.nombre)+(x.stockId&&S.stockpt[x.stockId]?'<small>hay '+num(S.stockpt[x.stockId].stock)+' · suma al stock al tildar</small>':'<small>no suma al stock</small>')+'</div><input class="f num" id="oi-'+i+'" data-oi="'+i+'" type="number" inputmode="decimal" step="any" value="'+esc(x.cant)+'" aria-label="Cantidad"><button class="rm" data-act="rmOrdItem" data-i="'+i+'" aria-label="Quitar">×</button></div>').join('') || '<div class="muted" style="font-size:13px">No hay nada para producir. Buscá productos abajo.</div>')+'</div>'+
+    '<div class="stack" style="gap:8px"><h3>Qué producir</h3><div class="lines">'+((d.items||[]).map((x,i)=>'<div class="line" style="grid-template-columns:1fr 80px 30px"><div class="nm">'+esc(x.nombre)+(x.stockId&&S.stockpt[x.stockId]?'<small>hay '+num(S.stockpt[x.stockId].stock)+' en stock</small>':'')+'</div><input class="f num" id="oi-'+i+'" data-oi="'+i+'" type="number" inputmode="decimal" step="any" value="'+esc(x.cant)+'" aria-label="Cantidad"><button class="rm" data-act="rmOrdItem" data-i="'+i+'" aria-label="Quitar">×</button></div>').join('') || '<div class="muted" style="font-size:13px">No hay nada para producir. Buscá productos abajo.</div>')+'</div>'+
     '<div class="search">'+svg('search')+'<input class="f" id="ordq" data-sq="1" placeholder="Agregar producto del stock: escribí 2 letras" value="'+esc(SH.q)+'" autocomplete="off"></div>'+
     (res.length?'<div class="results">'+res.map(i=>'<button data-act="addOrdItem" data-id="'+i.id+'"><span>'+esc(i.nombre)+'</span><span class="muted num">hay '+num(i.stock)+'</span></button>').join('')+'</div>':'')+
     (q.length>=2?'<button class="btn sm ghost" data-act="addOrdFree">+ Agregar “'+esc(SH.q)+'” como ítem libre</button>':'')+'</div>'+
@@ -1695,7 +1695,7 @@ const A = {
   archivarOrden: el => { const o=S.produccion[el.dataset.id]; if(o) save('produccion', Object.assign({},o,{archivada:true})); toast('Orden archivada'); },
   tglProd: el => { const o=S.produccion[el.dataset.id]; if(!o||readOnly) return; const its=clone(o.items||[]); const x=its[+el.dataset.i]; if(!x) return; x.listo=!x.listo; x.listoEn = x.listo? new Date().toISOString() : '';
     save('produccion', Object.assign({},o,{items:its}));
-    if(x.stockId && S.stockpt[x.stockId]){ const s=S.stockpt[x.stockId]; save('stockpt', Object.assign({},s,{stock: Math.max(0, num(s.stock) + (x.listo?1:-1)*num(x.cant)), actualizado:today()})); } },
+  },
   tglPed: el => { const p=S.pedidos[el.dataset.id]; if(!p||readOnly) return; const its=clone(p.items||[]); const x=its[+el.dataset.i]; if(!x) return; x.listo=!x.listo;
     const l=its.filter(y=>y.listo).length; let estado=p.estado||'pendiente'; if(l===its.length) estado='listo'; else if(l>0) estado='produccion'; else if(estado==='listo'||estado==='produccion') estado='pendiente';
     if(SECTOR==='cocina'){ S.pedidos=Object.assign({},S.pedidos,{[p.id]:Object.assign({},p,{items:its,estado})}); render(); rpc('marcar_item_pedido',{p_id:p.id,p_idx:+el.dataset.i,p_listo:x.listo}); } else save('pedidos', Object.assign({},p,{items:its, estado})); if(estado==='listo' && p.estado!=='listo') toast('Pedido de '+(p.clienteNombre||'')+' listo'); },
