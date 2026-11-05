@@ -208,6 +208,13 @@ table.tbl{border-collapse:collapse;width:100%;font-size:13.5px}
 .ckrow.done .ckn{text-decoration:line-through;color:var(--muted)}
 .ckrow .ckn{flex:1}
 .ckrow .ckn .pill{margin-left:4px;vertical-align:1px}
+.ecta{border:1px solid var(--line);border-radius:var(--r);padding:14px;background:var(--surface)}
+.ecta-dia{border-top:1px solid var(--line);padding-top:10px;display:flex;flex-direction:column;gap:4px}
+.ecta-dia>.row b{color:var(--accent)}
+.ecta-it{display:flex;justify-content:space-between;gap:10px;font-size:14px;align-items:center}
+.ecta-tot{border-top:2px solid var(--accent);padding-top:10px;display:flex;flex-direction:column;gap:4px;font-size:15px}
+.ecta-tot .big{font-size:18px;color:var(--accent);font-weight:800}
+.ecta-dia>.row b:first-child::first-letter{text-transform:uppercase}
 .prodday{width:100%;max-width:680px;margin-inline:auto}
 .ckrow.urgmax{background:var(--bad-soft);border-radius:10px;padding:5px 8px;margin:0 -8px}
 .ckrow.urgmax .ckn{color:var(--bad);font-weight:700}
@@ -280,8 +287,8 @@ table.tbl{border-collapse:collapse;width:100%;font-size:13.5px}
 </div>
 <div id="toast" class="toast" hidden></div>
 <script src="vendor/supabase.js"></script>
-<script src="config.js?v=20261105k"></script>
+<script src="config.js?v=20261105l"></script>
 
-<script src="app.js?v=20261105k"></script>
+<script src="app.js?v=20261105l"></script>
 </body>
 </html>

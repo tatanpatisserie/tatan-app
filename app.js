@@ -22,7 +22,7 @@ const norm = s => String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/
 const clone = o => JSON.parse(JSON.stringify(o));
 const sum = (a,f) => a.reduce((s,x)=>s+(f?f(x):x),0);
 const icon = {
-  calendar:'<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>',
+  download:'<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>', calendar:'<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>',
   home:'<path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/>',
   bag:'<path d="M5 8h14l-1 12H6z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/>',
   doc:'<path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5M10 13h6M10 17h6"/>',
@@ -1151,12 +1151,75 @@ function ccBox(d){
     (pend.length?'<div class="muted" style="font-size:13px">'+pend.map(p=>fdateShort(p.entrega)+' · '+$(totPedido(p).saldo)).join(' · ')+'</div>':'')+
     (debe>0.5?'<div class="grid3"><label class="lb">Paga ahora ($)<input class="f num" id="cc-monto" type="number" inputmode="decimal" step="any" value="'+esc(SH.ccMonto!=null?SH.ccMonto:Math.round(debe))+'"></label><label class="lb">Medio<select class="f" id="cc-medio">'+MEDIOS.filter(m=>m!=='Cuenta corriente').map(m=>'<option>'+m+'</option>').join('')+'</select></label><div style="display:flex;align-items:flex-end"><button class="btn pri" style="width:100%" data-act="cobrarCC">Registrar pago</button></div></div><div class="row" style="gap:8px"><button class="btn sm" data-act="copiarCC">Copiar resumen de cuenta</button></div>':'')+'</div>';
 }
+function pedidosCuenta(cid, per){ const LOC=SECTOR==='local'; const mes=today().slice(0,7);
+  return pedidosArr().filter(p=>p.clienteId===cid && p.estado!=='cancelado' && !esVentaDia(p) && (!LOC || p.canal!=='Mayorista'))
+    .filter(p=> per==='todo' ? true : per==='debe' ? totPedido(p).saldo>0.5 : (p.entrega||'').startsWith(mes))
+    .sort((a,b)=>(a.entrega||'').localeCompare(b.entrega||'')); }
+const PER_CTA = {mes:'Este mes', debe:'Sin pagar', todo:'Todo'};
+function perLabel(per){ return per==='mes' ? mesLabel(today().slice(0,7)) : per==='debe' ? 'Pedidos sin pagar' : 'Historial completo'; }
+function estadoCuentaBox(d){
+  const per = SH.ctaPer || 'mes'; const ps = pedidosCuenta(d.id, per);
+  const T = ps.reduce((a,p)=>{ const t=totPedido(p); a.tot+=t.aCobrar; a.pag+=t.pagado; a.sal+=Math.max(0,t.saldo); return a; }, {tot:0,pag:0,sal:0});
+  const chip = k => '<button class="chip" data-act="ctaPer" data-v="'+k+'" aria-pressed="'+(per===k)+'">'+PER_CTA[k]+'</button>';
+  return '<div class="ecta stack" style="gap:10px"><div class="row between"><h3 style="margin:0">Estado de cuenta</h3><button class="btn sm pri" data-act="jpgCuenta"'+(ps.length?'':' disabled')+'>'+svg('download')+'Descargar JPG</button></div>'+
+    '<div class="chips">'+chip('mes')+chip('debe')+chip('todo')+'</div>'+
+    (ps.length ? ps.map(p=>{ const t=totPedido(p);
+      return '<div class="ecta-dia"><div class="row between"><b>'+esc(fdiaLargo(p.entrega||today()))+'</b><b class="num">'+$(t.aCobrar)+'</b></div>'+
+        (p.items||[]).map(l=>'<div class="ecta-it"><span>'+(num(l.cant)!==1?'<b class="num">'+esc(l.cant)+'×</b> ':'')+esc(l.nombre)+'</span><span class="num muted">'+$(num(l.cant)*num(l.precio))+'</span></div>').join('')+
+        (t.desc?'<div class="ecta-it muted"><span>Descuento</span><span class="num">−'+$(t.desc)+'</span></div>':'')+(t.envio?'<div class="ecta-it muted"><span>Envío</span><span class="num">'+$(t.envio)+'</span></div>':'')+
+        (t.pagado?'<div class="ecta-it muted"><span>Pagó</span><span class="num">−'+$(t.pagado)+'</span></div>':'')+
+        '<div class="ecta-it"><span>'+(t.saldo>0.5?'Queda debiendo':'Pagado')+'</span>'+(t.saldo>0.5?'<span class="pill p-warn">'+$(t.saldo)+'</span>':'<span class="pill p-ok">Al día</span>')+'</div></div>'; }).join('') +
+      '<div class="ecta-tot"><div class="row between"><span>Total consumido</span><b class="num">'+$(T.tot)+'</b></div><div class="row between"><span>Pagado</span><b class="num">'+$(T.pag)+'</b></div><div class="row between big"><span>Debe</span><b class="num">'+$(T.sal)+'</b></div></div>'
+    : '<p class="muted" style="margin:0">No hay pedidos en este período.</p>')+'</div>';
+}
+async function cuentaJPG(c, per){
+  const n = neg(); const ps = pedidosCuenta(c.id, per);
+  try{ await Promise.all(['400 20px Nunito','600 20px Nunito','700 20px Nunito','800 20px Nunito','400 20px Doughy'].map(f=>document.fonts.load(f))); }catch(e){}
+  const logo = await cargarLogo();
+  const W=1080, M=72, V='#703260', B='#FCEFD9', INK='#241B1F', MU='#7A6F74', LN='#E6E1DD', WARN='#9A5B00', OK='#2E7D4F';
+  const cv=document.createElement('canvas'); const x=cv.getContext('2d');
+  const F=(w,sz,fam)=>(w+' '+sz+'px '+(fam||'Nunito, sans-serif'));
+  const rr=(X,Y,w,h,r)=>{ x.beginPath(); x.roundRect? x.roundRect(X,Y,w,h,r) : x.rect(X,Y,w,h); x.fill(); };
+  const T={tot:0,pag:0,sal:0};
+  const bloques = ps.map(p=>{ const t=totPedido(p); T.tot+=t.aCobrar; T.pag+=t.pagado; T.sal+=Math.max(0,t.saldo);
+    const filas=(p.items||[]).map(l=>[(num(l.cant)!==1?l.cant+'× ':'')+l.nombre, $(num(l.cant)*num(l.precio)), 0]);
+    if(t.desc) filas.push(['Descuento','−'+$(t.desc),1]); if(t.envio) filas.push(['Envío',$(t.envio),1]); if(t.pagado) filas.push(['Pagó','−'+$(t.pagado),1]);
+    return {p,t,filas, h: 70 + filas.length*42 + 56 + 24}; });
+  const H = M + 150 + 40 + 110 + bloques.reduce((a,b)=>a+b.h,0) + 40 + 230 + 150;
+  cv.width=W; cv.height=H; x.fillStyle='#FFFFFF'; x.fillRect(0,0,W,H); x.fillStyle=V; x.fillRect(0,0,W,14);
+  let y=M; x.textBaseline='top';
+  if(logo){ const lh=110, lw=logo.width*lh/logo.height; x.drawImage(logo,M,y,lw,lh); }
+  x.textAlign='right'; x.fillStyle=V; x.font=F(400,46,'Doughy, Nunito, sans-serif'); x.fillText('ESTADO DE CUENTA',W-M,y+4);
+  x.fillStyle=MU; x.font=F(600,26); x.fillText(perLabel(per)+'  ·  al '+fdate(today()),W-M,y+66); x.textAlign='left'; y+=150;
+  x.fillStyle=V; x.fillRect(M,y,W-2*M,4); y+=40;
+  x.fillStyle=MU; x.font=F(800,19); x.fillText('CLIENTE',M,y); x.fillStyle=INK; x.font=F(700,36); x.fillText(String(c.nombre||'').slice(0,40),M,y+28); y+=110;
+  bloques.forEach(b=>{ x.fillStyle=B; rr(M,y,W-2*M,56,14); x.fillStyle=V; x.font=F(800,26);
+    const dl=fdiaLargo(b.p.entrega||today()); x.fillText(dl[0].toUpperCase()+dl.slice(1),M+20,y+14); x.textAlign='right'; x.fillText($(b.t.aCobrar),W-M-20,y+14); x.textAlign='left'; y+=70;
+    b.filas.forEach(f=>{ x.fillStyle=f[2]?MU:INK; x.font=F(f[2]?600:400,27); let t=f[0]; while(x.measureText(t).width>W-2*M-260 && t.length>4) t=t.slice(0,-2); if(t!==f[0]) t=t.trim()+'…'; x.fillText(t,M+20,y); x.textAlign='right'; x.font=F(600,27); x.fillText(f[1],W-M-20,y); x.textAlign='left'; y+=42; });
+    const deb=b.t.saldo>0.5; x.font=F(700,25); x.fillStyle=deb?WARN:OK; x.fillText(deb?'Queda debiendo':'Pagado',M+20,y+8); x.textAlign='right'; x.fillText(deb?$(b.t.saldo):'Al día',W-M-20,y+8); x.textAlign='left'; y+=56;
+    x.fillStyle=LN; x.fillRect(M,y,W-2*M,2); y+=24; });
+  y+=40;
+  x.fillStyle=INK; x.font=F(600,30); x.fillText('Total consumido',M+20,y); x.textAlign='right'; x.fillText($(T.tot),W-M-20,y); x.textAlign='left'; y+=50;
+  x.fillText('Pagado',M+20,y); x.textAlign='right'; x.fillText($(T.pag),W-M-20,y); x.textAlign='left'; y+=60;
+  const tw=560, th=96; x.fillStyle=V; rr(W-M-tw,y,tw,th,48); x.fillStyle=B; x.textBaseline='middle'; x.font=F(700,32); x.fillText('Debe',W-M-tw+40,y+th/2); x.textAlign='right'; x.font=F(800,44); x.fillText($(T.sal),W-M-40,y+th/2); x.textAlign='left'; x.textBaseline='top';
+  const fy=H-110; x.fillStyle=LN; x.fillRect(M,fy,W-2*M,2);
+  x.textAlign='center'; x.fillStyle=V; x.font=F(700,26); x.fillText('¡Gracias por elegirnos!',W/2,fy+26);
+  const datos=[n.telefono,n.instagram,n.direccion].filter(Boolean).join('  ·  '); if(datos){ x.fillStyle=MU; x.font=F(600,22); x.fillText(datos,W/2,fy+62); }
+  return new Promise(res=>cv.toBlob(res,'image/jpeg',0.92));
+}
+async function compartirJPG(blob, nombre, ok){
+  nombre = nombre.normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^\w .-]/g,'').trim()+'.jpg';
+  const file = (typeof File==='function') ? new File([blob], nombre, {type:'image/jpeg'}) : null;
+  if(matchMedia('(pointer:coarse)').matches && file && navigator.canShare && navigator.canShare({files:[file]})){ try{ await navigator.share({files:[file], title:nombre}); return; }catch(e){ if(e && e.name==='AbortError') return; } }
+  const url = URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=nombre; document.body.appendChild(a); a.click(); setTimeout(()=>{ a.remove(); URL.revokeObjectURL(url); }, 4000);
+  toast(ok);
+}
 SHEETS.cliente = function(){
-  const d = SH.draft; const ps = d.id? pedidosArr().filter(p=>p.clienteId===d.id).sort(byEntrega).reverse() : [];
+  const d = SH.draft; const ps = d.id? pedidosArr().filter(p=>p.clienteId===d.id && (SECTOR!=='local' || p.canal!=='Mayorista')).sort(byEntrega).reverse() : [];
   const body = '<div class="grid2">'+fld('nombre','Nombre',d.nombre)+fld('telefono','Teléfono',d.telefono,'tel')+'</div>'+sel('tipo','Tipo',d.tipo||'Particular',['Particular','Mayorista','Empresa','Cuenta corriente'])+
     '<label class="lb">Notas (gustos, alergias, cumpleaños)<textarea class="f" id="d-notas" data-d="notas">'+esc(d.notas||'')+'</textarea></label>'+
     (d.id? '<div class="tiles" style="grid-template-columns:repeat(3,1fr)"><div class="tile"><span class="k">Pedidos</span><span class="v num">'+ps.filter(p=>p.estado!=='cancelado').length+'</span></div><div class="tile"><span class="k">Comprado</span><span class="v num">'+$(sum(ps.filter(p=>p.estado!=='cancelado'),p=>totPedido(p).total))+'</span></div><div class="tile"><span class="k">Debe</span><span class="v num">'+$(saldoCliente(d.id))+'</span></div></div>'+
-      ccBox(d)+
+      ccBox(d)+((d.tipo==='Cuenta corriente' || saldoCliente(d.id)>0.5)? estadoCuentaBox(d) : '')+
       '<div class="row between"><h3>Historial</h3><button class="btn sm" data-act="pedidoParaCliente">Nuevo pedido</button></div>'+(ps.length?'<div class="list">'+ps.map(pedidoItem).join('')+'</div>':'<p class="muted">Sin pedidos todavía.</p>') : '')+delBlock('este cliente (sus pedidos quedan)');
   return { title: d.id? d.nombre : 'Nuevo cliente', body, foot:(d.id?'<button class="btn danger sm" data-act="delAsk">Borrar</button>':'')+'<span class="grow"></span><button class="btn pri" data-act="saveCliente" '+(readOnly?'disabled':'')+'>Guardar</button>' };
 };
@@ -1794,6 +1857,8 @@ const A = {
   backPresu: () => { SH.type='presu'; renderSheet(); },
   copyPresu: () => copy(textoPresu(SH.draft)),
   jpgPresu: () => bajarPresuJPG(SH.draft),
+  ctaPer: el => { SH.ctaPer = el.dataset.v; renderSheetSoft(); },
+  jpgCuenta: async () => { const d=SH.draft; const per=SH.ctaPer||'mes'; toast('Armando la imagen…'); const blob=await cuentaJPG(d, per); if(!blob){ toast('No se pudo armar la imagen'); return; } compartirJPG(blob, 'Cuenta '+(d.nombre||'')+' '+today(), 'Estado de cuenta descargado'); },
   presuAPedido: async () => { const d=SH.draft; if(!(d.items||[]).length){ toast('El presupuesto no tiene productos'); return; }
     if(d.clienteNombre) d.clienteId=findOrCreateCliente(d);
     const pid = await save('pedidos', nuevoPedido({clienteNombre:d.clienteNombre, clienteId:d.clienteId||'', telefono:d.telefono, canal:'Evento', entrega:d.fechaEvento||today(), items:clone(d.items), descuento:d.descuento, descPct:d.descPct||'', envio:d.envio||'', pagos:clone(d.pagos||[]), mensaje:d.mensaje||'', cuentaCorriente:!!d.cuentaCorriente, notas:[d.evento, d.invitados?d.invitados+' invitados':'', 'Presupuesto N° '+pad(d.numero)].filter(Boolean).join(' · '), presupuestoId:d.id||''}));
