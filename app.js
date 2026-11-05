@@ -495,7 +495,7 @@ function pedidoItem(p){
   return '<button class="item" data-act="editPedido" data-id="'+p.id+'">'+
     '<div class="datechip'+(p.entrega===today()?' today':'')+'">'+(d?'<span>'+DIAS[d.getDay()]+'</span><b>'+d.getDate()+'</b>':'<b>?</b>')+'</div>'+
     '<div class="main"><span class="t">'+esc(p.clienteNombre||'Sin nombre')+(p.remito?' <span class="muted" style="font-weight:500">· Rto '+esc(p.remito)+'</span>':'')+(p.retiraOtro&&p.retiraNombre?' <span class="muted" style="font-weight:500">· retira '+esc(p.retiraNombre)+'</span>':'')+(p.hora?' <span class="muted" style="font-weight:500">· '+esc(p.hora)+'</span>':'')+'</span><span class="s">'+esc(resumen||'Sin productos')+'</span>'+
-    '<span class="row" style="gap:5px"><span class="pill '+e[1]+'">'+e[0]+'</span>'+progresoPill(p)+(p.canal&&p.canal!=='Pedido particular'&&p.canal!=='Mayorista'?'<span class="pill p-neu">'+esc(p.canal)+'</span>':'')+(p.iva?'<span class="pill p-neu">Con IVA</span>':'')+'</span></div>'+
+    '<span class="row" style="gap:5px"><span class="pill '+e[1]+'">'+e[0]+'</span>'+progresoPill(p)+(p.canal&&p.canal!=='Pedido particular'&&p.canal!=='Mayorista'?'<span class="pill p-neu">'+esc(p.canal)+'</span>':'')+(p.canal==='Fecha especial'&&p.cuentaCorriente?'<span class="pill p-acc">Cuenta corriente</span>':'')+(p.iva?'<span class="pill p-neu">Con IVA</span>':'')+'</span></div>'+
     '<div class="end"><span class="num" style="font-weight:700">'+$(t.aCobrar)+'</span>'+saldoPill(p)+'</div></button>';
 }
 /* ===== PEDIDOS ===== */
@@ -892,22 +892,25 @@ function itemsEditor(items){
 }
 const telKey = t => { const x=String(t||'').replace(/\D/g,''); return x.length>=8 ? x.slice(-8) : ''; };
 function clientePorTel(tel){ const k=telKey(tel); if(!k) return null; return Object.values(S.clientes).find(c=>telKey(c.telefono)===k) || null; }
+const esCC = d => d.canal==='Cuenta corriente' || (d.canal==='Fecha especial' && !!d.cuentaCorriente);
 function clienteFields(d){
-  const cc = d.canal==='Cuenta corriente';
+  const cc = esCC(d);
   const opts = Object.values(S.clientes).filter(c=>!cc || c.tipo==='Cuenta corriente').map(c=>'<option value="'+esc(c.nombre)+'">').join('');
   const cEx = cc && Object.values(S.clientes).find(c=>norm(c.nombre)===norm(d.clienteNombre||''));
   const conocido = d.telefono && clientePorTel(d.telefono);
   return '<datalist id="dl-cli">'+opts+'</datalist><div class="grid2">'+fld('telefono','Teléfono',d.telefono,'tel','placeholder="Ej: 223 555 1234"')+fld('clienteNombre','Cliente',d.clienteNombre,'text','list="dl-cli" autocomplete="off"')+'</div>'+
     (conocido?'<div class="muted" style="font-size:12.5px;margin-top:-6px">Cliente ya cargado con ese teléfono.</div>':'')+
     (cc ? '<div class="note">Va a la cuenta corriente'+(cEx?' de <b>'+esc(cEx.nombre)+'</b>, que hoy debe <b>'+$(saldoCliente(cEx.id))+'</b>':'')+'. No hace falta cargar el pago: se cobra después desde Más → Clientes.</div>' : '')+
+    (SH.type==='pedido' && d.canal==='Fecha especial' ? '<label class="ckline"><input type="checkbox" data-act="tglCC" '+(d.cuentaCorriente?'checked':'')+'> Cuenta corriente (empleados, familia o dueñas)</label>' : '')+
     (SH.type==='pedido' ? '<label class="ckline"><input type="checkbox" data-act="tglRetira" '+(d.retiraOtro?'checked':'')+'> Retira otra persona</label>'+(d.retiraOtro?fld('retiraNombre','Nombre de quien retira',d.retiraNombre||'','text','autocomplete="off"'):'') : '');
 }
 function findOrCreateCliente(d){
   const nombre = (d.clienteNombre||'').trim(); if(!nombre) return null;
-  const porTel = clientePorTel(d.telefono); if(porTel) return porTel.id;
+  const hacerCC = c => { if(esCC(d) && c.tipo!=='Cuenta corriente') save('clientes', Object.assign({}, c, {tipo:'Cuenta corriente'})); return c.id; };
+  const porTel = clientePorTel(d.telefono); if(porTel) return hacerCC(porTel);
   let c = Object.values(S.clientes).find(x=>norm(x.nombre)===norm(nombre) && (!telKey(x.telefono) || !telKey(d.telefono)));
-  if(c){ if(d.telefono && !c.telefono) save('clientes', Object.assign({}, c, {telefono:d.telefono})); return c.id; }
-  const id = uid(); save('clientes', {id, nombre, telefono:d.telefono||'', tipo: d.canal==='Mayorista'?'Mayorista':d.canal==='Cuenta corriente'?'Cuenta corriente':d.canal==='Empresa'?'Empresa':'Particular', creado: today()});
+  if(c){ if(d.telefono && !c.telefono) c = Object.assign({}, c, {telefono:d.telefono}); if(esCC(d) && c.tipo!=='Cuenta corriente') c = Object.assign({}, c, {tipo:'Cuenta corriente'}); if(c!==S.clientes[c.id]) save('clientes', c); return c.id; }
+  const id = uid(); save('clientes', {id, nombre, telefono:d.telefono||'', tipo: d.canal==='Mayorista'?'Mayorista':esCC(d)?'Cuenta corriente':d.canal==='Empresa'?'Empresa':'Particular', creado: today()});
   return id;
 }
 function waLink(tel, text){ let t = String(tel||'').replace(/\D/g,''); if(!t) return ''; if(!t.startsWith('54')){ t = t.replace(/^0/,''); t='549'+t; } return 'https://wa.me/'+t+'?text='+encodeURIComponent(text); }
@@ -1670,6 +1673,7 @@ const A = {
   copiarCC: () => { const d=SH.draft; const n=neg(); const pend=pendientesCliente(d.id);
     copy([n.nombre+' · Resumen de cuenta', 'Cliente: '+d.nombre, '', ...pend.map(p=>'• '+fdateShort(p.entrega)+': '+(p.items||[]).map(l=>(num(l.cant)!==1?l.cant+'× ':'')+l.nombre).join(', ')+' — saldo '+$(totPedido(p).saldo)), '', 'Total a pagar: '+$(saldoCliente(d.id))].join('\n')); },
   pedDesc: el => { const v=num(el.dataset.v); SH.draft.descPct = v||''; if(v) SH.draft.descuento=''; renderSheet(); },
+  tglCC: () => { SH.draft.cuentaCorriente = !SH.draft.cuentaCorriente; renderSheet(); },
   tglRetira: el => { SH.draft.retiraOtro = !SH.draft.retiraOtro; if(!SH.draft.retiraOtro) SH.draft.retiraNombre=''; renderSheet(); if(SH.draft.retiraOtro) setTimeout(()=>{ const x=document.getElementById('d-retiraNombre'); if(x) x.focus(); },30); },
   pedVista: el => { U.pedVista = el.dataset.v; render(); },
   nuevoFE: () => openSheet('pedido', nuevoPedido({canal:'Fecha especial'})),
@@ -1763,7 +1767,7 @@ document.addEventListener('input', ev => {
   if(!SH) return;
   const d = SH.draft;
   if(el.dataset.d==='telefono'){ d.telefono = el.value; const c = clientePorTel(el.value); if(c && SH.type!=='cliente'){ if(!d.clienteNombre || d._autoNom){ d.clienteNombre = c.nombre; d.clienteId = c.id; d._autoNom = true; } renderSheetSoft(); } return; }
-  if(el.dataset.d==='clienteNombre'){ d._autoNom = false; if(d.canal==='Cuenta corriente') renderSheetSoft(); }
+  if(el.dataset.d==='clienteNombre'){ d._autoNom = false; if(esCC(d)) renderSheetSoft(); }
   if(el.dataset.d){ setPath(d, el.dataset.d, el.value); if(['descuento','envio','invitados','precio','presentacion','unidad','recetaId','factor','packaging','minutos','rinde','extra','pct','redondeo','cat','canal','ingreso','egreso','tarifa','neto','iva','percepciones'].includes(el.dataset.d) && el.tagName!=='TEXTAREA') renderSheetSoft(); return; }
   if(el.dataset.it!=null){ d.items[+el.dataset.it][el.dataset.k] = el.value; renderSheetSoft(); return; }
   if(el.dataset.pg!=null){ d.pagos[+el.dataset.pg][el.dataset.k] = el.value; renderSheetSoft(); return; }
