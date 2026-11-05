@@ -484,7 +484,8 @@ R.inicio = function(){
   `;
 };
 const byEntrega = (a,b) => ((a.entrega||'')+(a.hora||'')).localeCompare((b.entrega||'')+(b.hora||''));
-const ESTADOS = {pendiente:['Pendiente','p-neu'], produccion:['En producción','p-pis'], listo:['Listo','p-acc'], entregado:['Entregado','p-ok'], cancelado:['Cancelado','p-bad']};
+const ESTADOS = {pendiente:['Pendiente','t-pend'], produccion:['En producción','t-prod'], listo:['Listo','t-listo'], entregado:['Entregado','t-ent'], cancelado:['Cancelado','p-bad']};
+const canalTag = c => ({'Local':'t-local','WhatsApp':'t-wa','Fecha especial':'t-fe','Cuenta corriente':'t-cc'})[c] || 't-otro';
 const CANALES = ['Pedido particular','Local','Evento','Fecha especial','Mayorista','Empresa','Cuenta corriente'];
 const esFE = p => p.canal==='Fecha especial' || !!p.fechaEspecial; // pedido de fecha especial (queda rotulado solo)
 const CANALES_MIN = ['Local','WhatsApp']; // la cuenta corriente es un casillero aparte
@@ -496,7 +497,7 @@ function pedidoItem(p){
   return '<button class="item" data-act="editPedido" data-id="'+p.id+'">'+
     '<div class="datechip'+(p.entrega===today()?' today':'')+'">'+(d?'<span>'+DIAS[d.getDay()]+'</span><b>'+d.getDate()+'</b>':'<b>?</b>')+'</div>'+
     '<div class="main"><span class="t">'+esc(p.clienteNombre||'Sin nombre')+(p.remito?' <span class="muted" style="font-weight:500">· Rto '+esc(p.remito)+'</span>':'')+(p.retiraOtro&&p.retiraNombre?' <span class="muted" style="font-weight:500">· retira '+esc(p.retiraNombre)+'</span>':'')+(p.hora?' <span class="muted" style="font-weight:500">· '+esc(p.hora)+'</span>':'')+'</span><span class="s">'+esc(resumen||'Sin productos')+'</span>'+
-    '<span class="row" style="gap:5px"><span class="pill '+e[1]+'">'+e[0]+'</span>'+progresoPill(p)+(p.canal&&p.canal!=='Pedido particular'&&p.canal!=='Mayorista'?'<span class="pill p-neu">'+esc(p.canal)+'</span>':'')+(p.fechaEspecial&&p.canal!=='Fecha especial'?'<span class="pill p-acc">Fecha especial</span>':'')+(p.cuentaCorriente&&p.canal!=='Cuenta corriente'?'<span class="pill p-acc">Cuenta corriente</span>':'')+(p.iva?'<span class="pill p-neu">Con IVA</span>':'')+'</span></div>'+
+    '<span class="row" style="gap:5px"><span class="pill '+e[1]+'">'+e[0]+'</span>'+progresoPill(p)+(p.canal&&p.canal!=='Pedido particular'&&p.canal!=='Mayorista'?'<span class="pill '+canalTag(p.canal)+'">'+esc(p.canal)+'</span>':'')+(p.fechaEspecial&&p.canal!=='Fecha especial'?'<span class="pill t-fe">Fecha especial</span>':'')+(p.cuentaCorriente&&p.canal!=='Cuenta corriente'?'<span class="pill t-cc">Cuenta corriente</span>':'')+(p.iva?'<span class="pill t-iva">Con IVA</span>':'')+'</span></div>'+
     '<div class="end"><span class="num" style="font-weight:700">'+$(t.aCobrar)+'</span>'+saldoPill(p)+'</div></button>';
 }
 /* ===== PEDIDOS ===== */
@@ -952,7 +953,7 @@ function bloquePedido(d, o){
 const SHEETS = {};
 SHEETS.pedido = function(){
   const d = SH.draft; const n = neg();
-  const body = (esFE(d)?'<div><span class="pill p-acc">Pedido de fecha especial</span></div>':'')+clienteFields(d)+
+  const body = (esFE(d)?'<div><span class="pill t-fe">Pedido de fecha especial</span></div>':'')+clienteFields(d)+
     '<div class="grid3">'+sel('canal','Canal de venta',CANALES_MIN.includes(d.canal)?d.canal:'',CANALES_MIN)+fld('entrega','Fecha de entrega',d.entrega,'date')+fld('hora','Hora',d.hora,'time')+'</div>'+
     sel('estado','Estado',d.estado,Object.entries(ESTADOS).map(([k,v])=>[k,v[0]]))+
     bloquePedido(d, {notas:'notas', notasLbl:'Notas (sabores, deco, dirección de entrega)'})+

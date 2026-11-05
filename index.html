@@ -88,6 +88,10 @@ h3{font-size:15px;font-weight:700}
 .chips{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none}
 .chip{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:6px 12px;font-size:13px;font-weight:600;white-space:nowrap;cursor:pointer}
 .chip[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+/* Etiquetas de pedidos: cada cosa con su color para diferenciarlas de un vistazo */
+.t-pend{background:#E6E9F2;color:#46507A}.t-prod{background:#FDE7D6;color:#A4521B}.t-listo{background:#D8EFEE;color:#1B6E6A}.t-ent{background:#ECEBEA;color:#5F5A57}
+.t-local{background:#DFEAF8;color:#2D5C93}.t-wa{background:#DDF6E6;color:#128C4A}.t-fe{background:#703260;color:#FCEFD9}.t-cc{background:#FCEFD9;color:#703260;box-shadow:inset 0 0 0 1px #E9D3B4}
+.t-iva{background:#EDE5EB;color:#81496F}.t-otro{background:#F6E3E9;color:#9B3D5C}
 .pill{display:inline-flex;align-items:center;gap:4px;border-radius:999px;padding:2px 9px;font-size:12px;font-weight:700;white-space:nowrap}
 .p-ok{background:var(--ok-soft);color:var(--ok)}.p-warn{background:var(--warn-soft);color:var(--warn)}.p-bad{background:var(--bad-soft);color:var(--bad)}
 .p-neu{background:var(--surface-2);color:var(--muted)}.p-acc{background:var(--accent-soft);color:var(--accent)}.p-pis{background:var(--pista-soft);color:var(--pista)}
@@ -262,8 +266,8 @@ table.tbl{border-collapse:collapse;width:100%;font-size:13.5px}
 </div>
 <div id="toast" class="toast" hidden></div>
 <script src="vendor/supabase.js"></script>
-<script src="config.js?v=20261104s"></script>
+<script src="config.js?v=20261104t"></script>
 
-<script src="app.js?v=20261104s"></script>
+<script src="app.js?v=20261104t"></script>
 </body>
 </html>
