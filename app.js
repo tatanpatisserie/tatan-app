@@ -497,7 +497,7 @@ function pedidoItem(p){
   return '<button class="item" data-act="editPedido" data-id="'+p.id+'">'+
     '<div class="datechip'+(p.entrega===today()?' today':'')+'">'+(d?'<span>'+DIAS[d.getDay()]+'</span><b>'+d.getDate()+'</b>':'<b>?</b>')+'</div>'+
     '<div class="main"><span class="t">'+esc(p.clienteNombre||'Sin nombre')+(p.remito?' <span class="muted" style="font-weight:500">· Rto '+esc(p.remito)+'</span>':'')+(p.retiraOtro&&p.retiraNombre?' <span class="muted" style="font-weight:500">· retira '+esc(p.retiraNombre)+'</span>':'')+(p.hora?' <span class="muted" style="font-weight:500">· '+esc(p.hora)+'</span>':'')+'</span><span class="s">'+esc(resumen||'Sin productos')+'</span>'+
-    '<span class="row" style="gap:5px"><span class="pill '+e[1]+'">'+e[0]+'</span>'+progresoPill(p)+(p.canal&&p.canal!=='Pedido particular'&&p.canal!=='Mayorista'?'<span class="pill '+canalTag(p.canal)+'">'+esc(p.canal)+'</span>':'')+(p.fechaEspecial&&p.canal!=='Fecha especial'?'<span class="pill t-fe">Fecha especial</span>':'')+(p.cuentaCorriente&&p.canal!=='Cuenta corriente'?'<span class="pill t-cc">Cuenta corriente</span>':'')+(p.iva?'<span class="pill t-iva">Con IVA</span>':'')+'</span></div>'+
+    '<span class="row" style="gap:5px"><span class="pill '+e[1]+'">'+e[0]+'</span>'+progresoPill(p)+(p.canal&&p.canal!=='Pedido particular'&&p.canal!=='Mayorista'?'<span class="pill '+canalTag(p.canal)+'">'+esc(p.canal)+'</span>':'')+(p.fechaEspecial&&p.canal!=='Fecha especial'?'<span class="pill t-fe">Fecha especial</span>':'')+(p.cuentaCorriente&&p.canal!=='Cuenta corriente'?'<span class="pill t-cc">Cuenta corriente</span>':'')+(p.iva?'<span class="pill t-iva">Con IVA</span>':'')+(p.presupuestoId?'<span class="pill t-pas">De presupuesto</span>':'')+'</span></div>'+
     '<div class="end"><span class="num" style="font-weight:700">'+$(t.aCobrar)+'</span>'+saldoPill(p)+'</div></button>';
 }
 /* ===== PEDIDOS ===== */
@@ -546,14 +546,16 @@ R.pedidos = function(){
   </div>`;
 };
 /* ===== PRESUPUESTOS ===== */
-function estadoPresu(p){ if(p.estado==='aceptado') return ['Aceptado','p-ok']; if(p.estado==='rechazado') return ['Rechazado','p-bad']; if(p.validoHasta && p.validoHasta<today()) return ['Vencido','p-neu']; return ['Enviado','p-acc']; }
+function estadoPresu(p){ if(p.estado==='aceptado') return ['Aceptado','p-ok']; if(p.estado==='rechazado') return ['Rechazado','p-bad']; if(p.validoHasta && p.validoHasta<today()) return ['Vencido','t-ent']; return ['Enviado','t-pend']; }
+function etiquetasPresu(p){ const e=estadoPresu(p); const t=totPedido(p);
+  return '<span class="row" style="gap:5px;flex-wrap:wrap"><span class="pill '+e[1]+'">'+e[0]+'</span>'+(p.pedidoId?'<span class="pill t-pas">Pasado a pedido</span>':'')+(t.pagado>0?'<span class="pill t-wa">'+(t.saldo<=0.5?'Pagado':'Con seña')+'</span>':'')+(num(p.descPct)?'<span class="pill t-otro">'+num(p.descPct)+'% desc.</span>':'')+'</span>'; }
 R.presupuestos = function(){
   const arr = Object.values(S.presupuestos).sort((a,b)=>(b.numero||0)-(a.numero||0));
   return `<div class="stack">
     <div class="row between"><h1>Presupuestos</h1><button class="btn pri sm" data-act="nuevoPresu">${svg('plus')}Nuevo</button></div>
     <p class="muted" style="margin:0">Armá el presupuesto con tu lista de precios, mandalo y, cuando lo confirman, pasalo a pedido con un toque.</p>
-    ${arr.length ? '<div class="list">'+arr.map(p=>{ const e=estadoPresu(p); const t=totPedido(p).aCobrar;
-      return '<button class="item" data-act="editPresu" data-id="'+p.id+'"><div class="datechip"><span>N°</span><b>'+pad(p.numero||0)+'</b></div><div class="main"><span class="t">'+esc(p.clienteNombre||'Sin cliente')+'</span><span class="s">'+esc(p.evento||'')+(p.fechaEvento?' · '+fdate(p.fechaEvento):'')+(p.invitados?' · '+p.invitados+' invitados':'')+'</span><span><span class="pill '+e[1]+'">'+e[0]+'</span></span></div><div class="end"><span class="num" style="font-weight:700">'+$(t)+'</span></div></button>'; }).join('')+'</div>'
+    ${arr.length ? '<div class="list">'+arr.map(p=>{ const t=totPedido(p).aCobrar;
+      return '<button class="item" data-act="editPresu" data-id="'+p.id+'"><div class="datechip"><span>N°</span><b>'+pad(p.numero||0)+'</b></div><div class="main"><span class="t">'+esc(p.clienteNombre||'Sin cliente')+'</span><span class="s">'+esc(p.evento||'')+(p.fechaEvento?' · '+fdate(p.fechaEvento):'')+(p.invitados?' · '+p.invitados+' invitados':'')+'</span>'+etiquetasPresu(p)+'</div><div class="end"><span class="num" style="font-weight:700">'+$(t)+'</span></div></button>'; }).join('')+'</div>'
       : '<div class="card empty"><h2>Todavía no hay presupuestos</h2><button class="btn pri" data-act="nuevoPresu">Armar el primero</button></div>'}
   </div>`;
 };
