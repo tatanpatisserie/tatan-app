@@ -1108,11 +1108,14 @@ SHEETS.entConf = function(){
     foot:'<button class="btn" data-act="close">No</button><span class="grow"></span><button class="btn pri" data-act="entSi" data-id="'+esc(p.id)+'">Sí, fue entregado</button>' };
 };
 SHEETS.ptConf = function(){
-  const i = S.stockpt[SH.draft.id]; const d = SH.draft.d; if(!i) return { title:'Stock', body:'<p class="muted">Este producto ya no está.</p>', foot:'<span class="grow"></span><button class="btn" data-act="close">Cerrar</button>' };
-  const ant = Math.round(num(i.stock)*100)/100, nue = Math.max(0, Math.round((ant+d)*100)/100);
-  return { title: d>0?'¿Sumar al stock?':'¿Restar del stock?',
-    body:'<p style="margin:0;font-size:16px">¿Estás segura de que querés <b>'+(d>0?'sumar':'restar')+' '+Math.abs(d).toLocaleString('es-AR')+'</b> a <b>'+esc(i.nombre)+'</b>?</p><div class="card row" style="justify-content:center;gap:14px;font-size:20px"><span class="num muted">'+ant.toLocaleString('es-AR')+'</span><span class="muted">→</span><b class="num">'+nue.toLocaleString('es-AR')+'</b></div>',
-    foot:'<button class="btn" data-act="close">No</button><span class="grow"></span><button class="btn pri" data-act="ptSi" data-id="'+esc(i.id)+'" data-d="'+d+'">Sí, '+(d>0?'sumar':'restar')+'</button>' };
+  const i = S.stockpt[SH.draft.id]; const sg = SH.draft.d>0 ? 1 : -1; if(!i) return { title:'Stock', body:'<p class="muted">Este producto ya no está.</p>', foot:'<span class="grow"></span><button class="btn" data-act="close">Cerrar</button>' };
+  const c = num(SH.draft.cant); const ant = Math.round(num(i.stock)*100)/100, nue = Math.max(0, Math.round((ant+sg*c)*100)/100);
+  return { title: sg>0?'Sumar al stock':'Restar del stock',
+    body:'<p style="margin:0;font-size:16px"><b>'+esc(i.nombre)+'</b></p>'+
+      '<label class="lb">¿Cuántas unidades querés '+(sg>0?'sumar':'restar')+'?<input class="f num" id="d-cant" data-d="cant" type="number" inputmode="decimal" step="any" min="0" value="'+esc(SH.draft.cant)+'" style="font-size:22px"></label>'+
+      '<div class="card row" style="justify-content:center;gap:14px;font-size:20px"><span class="num muted">'+ant.toLocaleString('es-AR')+'</span><span class="muted">'+(sg>0?'+':'−')+' '+c.toLocaleString('es-AR')+' →</span><b class="num">'+nue.toLocaleString('es-AR')+'</b></div>'+
+      (c>0?'<p class="muted" style="margin:0;font-size:13px">¿Está bien? Tocá "Sí" para aceptar el cambio.</p>':''),
+    foot:'<button class="btn" data-act="close">No</button><span class="grow"></span><button class="btn pri" data-act="ptSi" data-id="'+esc(i.id)+'" '+(c>0?'':'disabled')+'>Sí, '+(sg>0?'sumar ':'restar ')+c.toLocaleString('es-AR')+'</button>' };
 };
 SHEETS.texto = function(){ return { title:'Copiá este texto', body:'<p class="muted" style="margin:0">No se pudo copiar solo. Mantené apretado el texto para seleccionarlo.</p><textarea class="f" id="txtcopy" style="min-height:300px" readonly>'+esc(SH.draft.text)+'</textarea>', foot:'<span class="grow"></span><button class="btn pri" data-act="close">Listo</button>' }; };
 SHEETS.gasto = function(){
@@ -1673,8 +1676,8 @@ const A = {
   },
   salirTodos: async () => { if(!confirm('Se cierra tu sesión en todos los celulares, tablets y compus donde entraste. ¿Seguir?')) return; await sb.auth.signOut({ scope:'global' }); location.reload(); },
   fPT: el => { U.fPT = el.dataset.v; render(); },
-  ptAdj: el => { const i=S.stockpt[el.dataset.id]; if(!i||readOnly) return; openSheet('ptConf', {id:i.id, d:num(el.dataset.d)}); },
-  ptSi: el => { closeSheet(); const i=S.stockpt[el.dataset.id]; if(!i||readOnly) return; const n=Math.max(0, Math.round((num(i.stock)+num(el.dataset.d))*100)/100); S.stockpt=Object.assign({},S.stockpt,{[i.id]:Object.assign({},i,{stock:n, actualizado:today()})}); render(); savePTSoon(i.id); toast(i.nombre+': stock en '+n.toLocaleString('es-AR')); },
+  ptAdj: el => { const i=S.stockpt[el.dataset.id]; if(!i||readOnly) return; openSheet('ptConf', {id:i.id, d:num(el.dataset.d), cant:1}); setTimeout(()=>{ const x=document.getElementById('d-cant'); if(x){ x.focus(); x.select(); } },60); },
+  ptSi: el => { const dd=SH&&SH.draft; const delta=(dd.d>0?1:-1)*num(dd.cant); if(!delta) return; closeSheet(); const i=S.stockpt[el.dataset.id]; if(!i||readOnly) return; const n=Math.max(0, Math.round((num(i.stock)+delta)*100)/100); S.stockpt=Object.assign({},S.stockpt,{[i.id]:Object.assign({},i,{stock:n, actualizado:today()})}); render(); savePTSoon(i.id); toast(i.nombre+': stock en '+n.toLocaleString('es-AR')); },
   editPT: el => { const i=S.stockpt[el.dataset.id]; if(i) openSheet('pt', clone(i)); },
   nuevoPT: () => openSheet('pt', {nombre:'', grupo:'', sector: SECTOR==='local'?'Local':'Cocina', stock:0, minimo:'', objetivo:'', nota:''}),
   ptAskNo: () => { SH.ptAsk=false; renderSheet(); },
@@ -1828,7 +1831,7 @@ document.addEventListener('input', ev => {
   const d = SH.draft;
   if(el.dataset.d==='telefono'){ d.telefono = el.value; const c = clientePorTel(el.value); if(c && SH.type!=='cliente'){ if(!d.clienteNombre || d._autoNom){ d.clienteNombre = c.nombre; d.clienteId = c.id; d._autoNom = true; } renderSheetSoft(); } return; }
   if(el.dataset.d==='clienteNombre'){ d._autoNom = false; if(esCC(d)) renderSheetSoft(); }
-  if(el.dataset.d){ setPath(d, el.dataset.d, el.value); if(['descuento','envio','invitados','precio','presentacion','unidad','recetaId','factor','packaging','minutos','rinde','extra','pct','redondeo','cat','canal','ingreso','egreso','tarifa','neto','iva','percepciones'].includes(el.dataset.d) && el.tagName!=='TEXTAREA') renderSheetSoft(); return; }
+  if(el.dataset.d){ setPath(d, el.dataset.d, el.value); if(['descuento','envio','invitados','precio','presentacion','unidad','recetaId','factor','packaging','minutos','rinde','extra','pct','redondeo','cat','canal','ingreso','egreso','tarifa','neto','iva','percepciones','cant'].includes(el.dataset.d) && el.tagName!=='TEXTAREA') renderSheetSoft(); return; }
   if(el.dataset.it!=null){ d.items[+el.dataset.it][el.dataset.k] = el.value; renderSheetSoft(); return; }
   if(el.dataset.pg!=null){ d.pagos[+el.dataset.pg][el.dataset.k] = el.value; renderSheetSoft(); return; }
   if(el.dataset.oi!=null){ d.items[+el.dataset.oi].cant = el.value; return; }
