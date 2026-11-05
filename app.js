@@ -1412,9 +1412,12 @@ function movItemsBlock(d){
     '<p class="muted" style="margin:0;font-size:13px">Cargá cada ítem como figura en el comprobante. Al guardar, el precio de cada materia prima se actualiza solo.</p>'+
     (lineas?'<div class="lines">'+lineas+'</div><div class="row between" style="font-size:14px"><span class="muted">Suma de los ítems</span><b class="num">'+$(sum(d.items,l=>num(l.cant)*num(l.precio)))+'</b></div>':'')+
     (sinLista?'<div class="note">La lista de materia prima todavía no está activada para el local. Avisale a Gaba.</div>':
-    '<div class="search">'+svg('search')+'<input class="f" id="movq" data-sq="1" placeholder="Buscar materia prima: harina, azúcar, chocolate…" value="'+esc(SH.q||'')+'" autocomplete="off"></div>'+
+    '<label class="lb">Elegir de la lista<select class="f" id="movpick" data-chg="movPick"><option value="">Toda la materia prima ('+Object.keys(S.insumos).length+') · elegí una</option>'+movOpts()+'</select></label>'+
+    '<div class="search">'+svg('search')+'<input class="f" id="movq" data-sq="1" placeholder="O escribí para buscar: harina, azúcar, chocolate…" value="'+esc(SH.q||'')+'" autocomplete="off"></div>'+
     (res.length?'<div class="results">'+res.map(i=>'<button data-act="addMovItem" data-id="'+i.id+'"><span>'+esc(i.nombre)+'</span><span class="muted">'+esc(i.presentacion?fmtCant(i.presentacion,i.unidad):(i.cat||''))+'</span></button>').join('')+'</div>':(q.length>=2?'<p class="muted" style="margin:0;font-size:13px">No encontré esa materia prima. Tiene que estar cargada en Costos → Insumos.</p>':'')))+'</div>';
 }
+function movOpts(){ const g={}; Object.values(S.insumos).forEach(i=>{ const k=i.cat||'Otros'; (g[k]=g[k]||[]).push(i); });
+  return Object.keys(g).sort((a,b)=>a.localeCompare(b,'es')).map(k=>'<optgroup label="'+esc(k)+'">'+g[k].sort((a,b)=>(a.nombre||'').localeCompare(b.nombre||'','es')).map(i=>'<option value="'+esc(i.id)+'">'+esc(i.nombre)+(i.presentacion?' · '+esc(fmtCant(i.presentacion,i.unidad)):'')+'</option>').join('')+'</optgroup>').join(''); }
 async function aplicarPreciosFactura(d){
   const its = (d.items||[]).filter(l=>l.insumoId && num(l.precio)>0); if(!its.length) return;
   const f = d.fecha||today();
@@ -1727,6 +1730,7 @@ const A = {
   editMov: el => { const m=S.movprov[el.dataset.id]; if(m) openSheet('mov', clone(m), {volver: SH&&SH.type==='prov' ? clone(SH.draft) : null}); },
   movTipo: el => { SH.draft.tipo = el.dataset.v; renderSheet(); },
   addMovItem: el => { const i=S.insumos[el.dataset.id]; if(!i) return; const d=SH.draft; d.items=d.items||[]; d.items.push({insumoId:i.id, nombre:i.nombre, cant:1, precio:''}); SH.q=''; renderSheet(); setTimeout(()=>{ const x=document.getElementById('mi-p-'+(d.items.length-1)); if(x) x.focus(); }, 30); },
+  movPick: el => { if(el.value) A.addMovItem({dataset:{id:el.value}}); },
   rmMovItem: el => { SH.draft.items.splice(+el.dataset.i,1); renderSheet(); },
   saveMov: () => { const d=SH.draft; if(!(d.proveedor||'').trim()){ toast('Elegí el proveedor'); return; }
     d.items = (d.items||[]).filter(l=>l.nombre).map(l=>Object.assign({}, l, {cant:num(l.cant)||1, precio:num(l.precio)}));
