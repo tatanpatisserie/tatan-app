@@ -1401,7 +1401,8 @@ SHEETS.prov = function(){
 };
 function movItemsBlock(d){
   const q = norm(SH.q||''); const plata = SECTOR==='todo';
-  const res = q.length>=2 ? Object.values(S.insumos).filter(i=>norm(i.nombre+' '+(i.cat||'')).includes(q)).sort((a,b)=>(a.nombre||'').localeCompare(b.nombre||'')).slice(0,8) : [];
+  const res = q.length>=2 ? Object.values(S.insumos).filter(i=>norm(i.nombre+' '+(i.cat||'')).includes(q)).sort((a,b)=>(a.nombre||'').localeCompare(b.nombre||'')).slice(0,40) : [];
+  const sel = Math.min(SH.sel||0, Math.max(0,res.length-1));
   const sinLista = SECTOR==='local' && !loaded.has('insumos');
   const lineas = (d.items||[]).map((l,i)=>{ const ins=S.insumos[l.insumoId]; const ant = plata && ins && num(ins.precio) ? num(ins.precio) : 0; const dif = ant && num(l.precio) ? (num(l.precio)-ant)/ant : null;
     return '<div class="line mvl"><div class="nm">'+esc(l.nombre)+'<small>'+(ins&&ins.presentacion?'trae '+fmtCant(ins.presentacion,ins.unidad):'')+(ant?' · antes '+$(ant)+(dif!=null&&Math.abs(dif)>=0.005?' <b style="color:'+(dif>0?'var(--bad)':'var(--ok)')+'">'+(dif>0?'+':'')+pct(dif)+'</b>':''):'')+'</small></div>'+
@@ -1413,8 +1414,8 @@ function movItemsBlock(d){
     (lineas?'<div class="lines">'+lineas+'</div><div class="row between" style="font-size:14px"><span class="muted">Suma de los ítems</span><b class="num">'+$(sum(d.items,l=>num(l.cant)*num(l.precio)))+'</b></div>':'')+
     (sinLista?'<div class="note">La lista de materia prima todavía no está activada para el local. Avisale a Gaba.</div>':
     '<label class="lb">Elegir de la lista<select class="f" id="movpick" data-chg="movPick"><option value="">Toda la materia prima ('+Object.keys(S.insumos).length+') · elegí una</option>'+movOpts()+'</select></label>'+
-    '<div class="search">'+svg('search')+'<input class="f" id="movq" data-sq="1" placeholder="O escribí para buscar: harina, azúcar, chocolate…" value="'+esc(SH.q||'')+'" autocomplete="off"></div>'+
-    (res.length?'<div class="results">'+res.map(i=>'<button data-act="addMovItem" data-id="'+i.id+'"><span>'+esc(i.nombre)+'</span><span class="muted">'+esc(i.presentacion?fmtCant(i.presentacion,i.unidad):(i.cat||''))+'</span></button>').join('')+'</div>':(q.length>=2?'<p class="muted" style="margin:0;font-size:13px">No encontré esa materia prima. Tiene que estar cargada en Costos → Insumos.</p>':'')))+'</div>';
+    '<div class="search">'+svg('search')+'<input class="f" id="movq" data-sq="1" placeholder="O escribí para buscar · ↑ ↓ y Enter" value="'+esc(SH.q||'')+'" autocomplete="off"></div>'+
+    (res.length?'<div class="results" id="movq-res" style="max-height:280px;overflow-y:auto">'+res.map((i,k)=>'<button data-act="addMovItem" data-id="'+i.id+'" class="'+(k===sel?'on':'')+'"><span>'+esc(i.nombre)+'</span><span class="muted">'+esc(i.presentacion?fmtCant(i.presentacion,i.unidad):(i.cat||''))+'</span></button>').join('')+'</div>':(q.length>=2?'<p class="muted" style="margin:0;font-size:13px">No encontré esa materia prima. Tiene que estar cargada en Costos → Insumos.</p>':'')))+'</div>';
 }
 function movOpts(){ const g={}; Object.values(S.insumos).forEach(i=>{ const k=i.cat||'Otros'; (g[k]=g[k]||[]).push(i); });
   return Object.keys(g).sort((a,b)=>a.localeCompare(b,'es')).map(k=>'<optgroup label="'+esc(k)+'">'+g[k].sort((a,b)=>(a.nombre||'').localeCompare(b.nombre||'','es')).map(i=>'<option value="'+esc(i.id)+'">'+esc(i.nombre)+(i.presentacion?' · '+esc(fmtCant(i.presentacion,i.unidad)):'')+'</option>').join('')+'</optgroup>').join(''); }
@@ -1729,7 +1730,7 @@ const A = {
   nuevoMov: el => openSheet('mov', {tipo:(el&&el.dataset&&el.dataset.tipo)||'FACTURA', proveedor:(el&&el.dataset&&el.dataset.prov)||'', fecha:today(), numero:'', rubro:'', descripcion:'', neto:'', iva:'', percepciones:'', total:''}, {volver: SH&&SH.type==='prov' ? clone(SH.draft) : null}),
   editMov: el => { const m=S.movprov[el.dataset.id]; if(m) openSheet('mov', clone(m), {volver: SH&&SH.type==='prov' ? clone(SH.draft) : null}); },
   movTipo: el => { SH.draft.tipo = el.dataset.v; renderSheet(); },
-  addMovItem: el => { const i=S.insumos[el.dataset.id]; if(!i) return; const d=SH.draft; d.items=d.items||[]; d.items.push({insumoId:i.id, nombre:i.nombre, cant:1, precio:''}); SH.q=''; renderSheet(); setTimeout(()=>{ const x=document.getElementById('mi-p-'+(d.items.length-1)); if(x) x.focus(); }, 30); },
+  addMovItem: el => { const i=S.insumos[el.dataset.id]; if(!i) return; const d=SH.draft; d.items=d.items||[]; d.items.push({insumoId:i.id, nombre:i.nombre, cant:1, precio:''}); SH.q=''; SH.sel=0; renderSheet(); setTimeout(()=>{ const x=document.getElementById('mi-p-'+(d.items.length-1)); if(x) x.focus(); }, 30); },
   movPick: el => { if(el.value) A.addMovItem({dataset:{id:el.value}}); },
   rmMovItem: el => { SH.draft.items.splice(+el.dataset.i,1); renderSheet(); },
   saveMov: () => { const d=SH.draft; if(!(d.proveedor||'').trim()){ toast('Elegí el proveedor'); return; }
@@ -2008,6 +2009,7 @@ document.addEventListener('input', ev => {
 document.addEventListener('change', ev => { const el=ev.target; if(el.dataset && el.dataset.chg && A[el.dataset.chg]){ A[el.dataset.chg](el); return; } if(el.tagName==='SELECT'){ if(el.dataset.bind){ U[el.dataset.bind]=el.value; render(); } else if(SH && el.dataset.d){ SH.draft[el.dataset.d]=el.value; renderSheet(); } } });
 let softT=null; function renderSheetSoft(){ clearTimeout(softT); softT=setTimeout(renderSheet, 450); }
 document.addEventListener('keydown', ev => { if(ev.key==='Escape' && SH) closeSheet();
+  if(SH && ev.target.id==='movq' && (ev.key==='ArrowDown'||ev.key==='ArrowUp')){ const bs=[...document.querySelectorAll('#movq-res button')]; if(bs.length){ ev.preventDefault(); SH.sel = ((SH.sel||0) + (ev.key==='ArrowDown'?1:-1) + bs.length) % bs.length; bs.forEach((b,k)=>b.classList.toggle('on', k===SH.sel)); bs[SH.sel].scrollIntoView({block:'nearest'}); } return; }
   if(SH && ev.target.id==='itq' && (ev.key==='ArrowDown'||ev.key==='ArrowUp')){ const n=document.querySelectorAll('#itq-res .results button').length; if(n){ ev.preventDefault(); SH.sel = ((SH.sel||0) + (ev.key==='ArrowDown'?1:-1) + n) % n; pintarResultados(); const on=document.querySelector('#itq-res .results button.on'); if(on) on.scrollIntoView({block:'nearest'}); } return; }
   if(ev.key==='Enter' && ev.target.dataset && ev.target.dataset.sq){ const b=document.querySelector('.results button.on') || document.querySelector('.results button'); if(b){ ev.preventDefault(); b.click(); } } });
 
