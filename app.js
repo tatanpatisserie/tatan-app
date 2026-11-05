@@ -1213,7 +1213,10 @@ SHEETS.pt = function(){
   const d = SH.draft; const grupos=[...new Set(Object.values(S.stockpt).map(i=>i.grupo).filter(Boolean))];
   const body = fld('nombre','Producto',d.nombre)+'<datalist id="dl-grp">'+grupos.map(g=>'<option value="'+esc(g)+'">').join('')+'</datalist>'+
     '<div class="grid2">'+fld('grupo','Grupo',d.grupo,'text','list="dl-grp"')+sel('sector','Dónde está',d.sector||'Cocina',['Cocina','Local'])+'</div>'+
-    '<div class="grid3">'+fld('stock','Hay ahora',d.stock,'number')+fld('minimo','Mínimo',d.minimo||'','number')+fld('objetivo','Cantidad ideal',d.objetivo||'','number')+'</div>'+
+    '<div class="grid3">'+fld('stock','Hay ahora',d.stock,'number')+(SECTOR==='cocina'
+      ? '<div class="tile"><span class="k">Mínimo</span><span class="v num" style="font-size:18px">'+(num(d.minimo)?num(d.minimo).toLocaleString('es-AR'):'—')+'</span></div><div class="tile"><span class="k">Cantidad ideal</span><span class="v num" style="font-size:18px">'+(num(d.objetivo)?num(d.objetivo).toLocaleString('es-AR'):'—')+'</span></div>'
+      : fld('minimo','Mínimo',d.minimo||'','number')+fld('objetivo','Cantidad ideal',d.objetivo||'','number'))+'</div>'+
+    (SECTOR==='cocina'?'<p class="muted" style="margin:0;font-size:12.5px">El mínimo y la cantidad ideal los cambia el local o administración.</p>':'')+
     '<p class="muted" style="margin:0;font-size:13px">Cuando “hay ahora” llega al mínimo, la producción pide lo que falta para llegar a la cantidad ideal.</p>'+
     fld('nota','Nota',d.nota)+delBlock('este producto del stock')+
     (SH.ptAsk?'<div class="confirm">¿Estás segura de cambiar el stock de '+(Math.round(num(S.stockpt[d.id].stock)*100)/100).toLocaleString('es-AR')+' a '+num(d.stock).toLocaleString('es-AR')+'?<span style="flex:1"></span><button class="btn sm" data-act="ptAskNo">No</button><button class="btn sm pri" data-act="ptAskSi">Sí, guardar</button></div>':'');
@@ -1677,6 +1680,7 @@ const A = {
   ptAskNo: () => { SH.ptAsk=false; renderSheet(); },
   ptAskSi: () => { SH.ptOk=true; A.savePT(); },
   savePT: () => { const d=SH.draft; if(!(d.nombre||'').trim()){ toast('Poné el nombre'); return; }
+    if(SECTOR==='cocina'){ const o=S.stockpt[d.id]||{}; d.minimo=o.minimo||''; d.objetivo=o.objetivo||''; }
     if(d.id && S.stockpt[d.id] && num(d.stock)!==num(S.stockpt[d.id].stock) && !SH.ptOk){ SH.ptAsk=true; renderSheet(); return; } d.stock=num(d.stock); d.minimo=num(d.minimo); d.objetivo=num(d.objetivo); d.actualizado=today(); save('stockpt', d); closeSheet(); toast('Guardado'); },
   armarProd: () => { const its=faltantesPT(); if(!its.length) toast('No hay faltantes: ningún producto llegó a su mínimo'); openSheet('orden', {fecha:today(), items:its, origen:'stock', nota:'', armadaPor:''}); },
   ordenManual: () => openSheet('orden', {fecha:today(), items:[], origen:'manual', nota:'', armadaPor:''}),
