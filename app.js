@@ -1438,7 +1438,7 @@ SHEETS.mov = function(){
     (d.tipo==='PAGO' ? fld('total','Importe pagado ($)',d.total||'','number') :
       '<div class="grid3">'+fld('neto','Neto ($)',d.neto||'','number',netoItems?'placeholder="'+esc(String(Math.round(netoItems*100)/100))+'"':'')+fld('iva','IVA ($)',d.iva||'','number')+fld('percepciones','Percep. ($)',d.percepciones||'','number')+'</div>'+
       fld('total','Total ($)',d.total||'','number','placeholder="'+(autoTot?esc(String(autoTot)):'Si lo dejás vacío, suma neto + IVA + percepciones')+'"'))+
-    fld('rubro','Rubro',d.rubro,'text','list="rubros2"')+'<datalist id="rubros2">'+RUBROS_DEF().map(r=>'<option value="'+esc(r)+'">').join('')+'</datalist>'+
+    (['FACTURA','REMITO'].includes(d.tipo)? '' : fld('rubro','Rubro',d.rubro,'text','list="rubros2"')+'<datalist id="rubros2">'+RUBROS_DEF().map(r=>'<option value="'+esc(r)+'">').join('')+'</datalist>')+
     '<label class="lb">Detalle<textarea class="f" data-d="descripcion" id="d-descripcion" rows="2" placeholder="Qué vino, observaciones">'+esc(d.descripcion||'')+'</textarea></label>'+
     (local?'<div class="note">Queda guardado para administración. Después de guardar no lo vas a ver desde el local.</div>':'')+delBlock('este comprobante');
   return { title: d.id&&d.creado ? (TIPO_LBL[d.tipo]||'Comprobante') : 'Nuevo comprobante', body, foot:(d.id&&d.creado&&!local?'<button class="btn danger sm" data-act="delAsk">Borrar</button>':'')+'<span class="grow"></span><button class="btn pri" data-act="saveMov">Guardar</button>' };
@@ -1735,7 +1735,7 @@ const A = {
     ['neto','iva','percepciones','total'].forEach(k=>{ d[k] = d[k]===''||d[k]==null ? '' : num(d[k]); });
     if(d.total==='' ) d.total = num(d.neto)+num(d.iva)+num(d.percepciones);
     if(!num(d.total)){ toast('Poné el importe'); return; }
-    d.proveedor = d.proveedor.trim(); if(!d.creado) d.creado = today();
+    d.proveedor = d.proveedor.trim(); if(!d.creado) d.creado = today(); if(!d.rubro){ const pv=Object.values(S.proveedores).find(x=>norm(x.nombre)===norm(d.proveedor)); if(pv&&pv.rubro) d.rubro=pv.rubro; }
     const pk = 'pv-'+slug(d.proveedor); if(SECTOR==='todo' && !S.proveedores[pk]) save('proveedores', {id:pk, nombre:d.proveedor, rubro:d.rubro||'', creado:today()});
     save('movprov', d); const v = SH.volver; closeSheet(); toast(TIPO_LBL[d.tipo]+' guardado'+(d.tipo==='PAGO'?'':'')); if(v) openSheet('prov', v); aplicarPreciosFactura(d); },
   importarSheet: () => openSheet('importar', {}),
