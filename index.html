@@ -85,7 +85,8 @@ h3{font-size:15px;font-weight:700}
 .btn.danger{color:var(--bad);border-color:var(--bad-soft)}
 .btn[disabled]{opacity:.5;cursor:default}
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-.chips{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none}
+.chips{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none;flex-shrink:0}
+.sheet-b>*{flex-shrink:0}
 .chip{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:6px 12px;font-size:13px;font-weight:600;white-space:nowrap;cursor:pointer}
 .chip[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
 /* Etiquetas de pedidos: cada cosa con su color para diferenciarlas de un vistazo */
@@ -287,8 +288,8 @@ table.tbl{border-collapse:collapse;width:100%;font-size:13.5px}
 </div>
 <div id="toast" class="toast" hidden></div>
 <script src="vendor/supabase.js"></script>
-<script src="config.js?v=20261105o"></script>
+<script src="config.js?v=20261105p"></script>
 
-<script src="app.js?v=20261105o"></script>
+<script src="app.js?v=20261105p"></script>
 </body>
 </html>
