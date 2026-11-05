@@ -1107,6 +1107,13 @@ SHEETS.entConf = function(){
       (t.saldo>0.5?'<div class="note">Ojo: todavía tiene saldo pendiente de <b>'+$(t.saldo)+'</b>.</div>':''),
     foot:'<button class="btn" data-act="close">No</button><span class="grow"></span><button class="btn pri" data-act="entSi" data-id="'+esc(p.id)+'">Sí, fue entregado</button>' };
 };
+SHEETS.ptConf = function(){
+  const i = S.stockpt[SH.draft.id]; const d = SH.draft.d; if(!i) return { title:'Stock', body:'<p class="muted">Este producto ya no está.</p>', foot:'<span class="grow"></span><button class="btn" data-act="close">Cerrar</button>' };
+  const ant = Math.round(num(i.stock)*100)/100, nue = Math.max(0, Math.round((ant+d)*100)/100);
+  return { title: d>0?'¿Sumar al stock?':'¿Restar del stock?',
+    body:'<p style="margin:0;font-size:16px">¿Estás segura de que querés <b>'+(d>0?'sumar':'restar')+' '+Math.abs(d).toLocaleString('es-AR')+'</b> a <b>'+esc(i.nombre)+'</b>?</p><div class="card row" style="justify-content:center;gap:14px;font-size:20px"><span class="num muted">'+ant.toLocaleString('es-AR')+'</span><span class="muted">→</span><b class="num">'+nue.toLocaleString('es-AR')+'</b></div>',
+    foot:'<button class="btn" data-act="close">No</button><span class="grow"></span><button class="btn pri" data-act="ptSi" data-id="'+esc(i.id)+'" data-d="'+d+'">Sí, '+(d>0?'sumar':'restar')+'</button>' };
+};
 SHEETS.texto = function(){ return { title:'Copiá este texto', body:'<p class="muted" style="margin:0">No se pudo copiar solo. Mantené apretado el texto para seleccionarlo.</p><textarea class="f" id="txtcopy" style="min-height:300px" readonly>'+esc(SH.draft.text)+'</textarea>', foot:'<span class="grow"></span><button class="btn pri" data-act="close">Listo</button>' }; };
 SHEETS.gasto = function(){
   const d = SH.draft;
@@ -1163,8 +1170,9 @@ SHEETS.insumo = function(){
 SHEETS.stock = function(){
   const d = SH.draft; const big = d.unidad==='g'?'kg':d.unidad==='ml'?'lt':'u'; const f = d.unidad==='u'?1:1000;
   const body = '<div class="tiles" style="grid-template-columns:1fr 1fr"><div class="tile"><span class="k">Stock actual</span><span class="v num">'+(d.stock!=null&&d.stock!==''?fmtCant(d.stock,d.unidad):'Sin cargar')+'</span></div><div class="tile"><span class="k">Estado</span><span><span class="pill '+estadoStock(d)[1]+'">'+estadoStock(d)[0]+'</span></span></div></div>'+
-    '<label class="lb">Cantidad ('+big+')<input class="f num" id="mov-q" type="number" inputmode="decimal" step="any" placeholder="Ej: 2,5"></label>'+
-    '<div class="grid3"><button class="btn" data-act="mov" data-t="in">+ Entró</button><button class="btn" data-act="mov" data-t="out">− Salió</button><button class="btn" data-act="mov" data-t="set">Fijar stock</button></div>'+
+    '<label class="lb">Cantidad ('+big+')<input class="f num" id="mov-q" type="number" inputmode="decimal" step="any" placeholder="Ej: 2,5" value="'+(SH.movAsk?esc(SH.movAsk.raw):'')+'"></label>'+
+    (SH.movAsk ? '<div class="confirm">¿Estás segura? '+esc(SH.movAsk.txt)+'<span style="flex:1"></span><button class="btn sm" data-act="movNo">No</button><button class="btn sm pri" data-act="movSi">Sí</button></div>'
+      : '<div class="grid3"><button class="btn" data-act="mov" data-t="in">+ Entró</button><button class="btn" data-act="mov" data-t="out">− Salió</button><button class="btn" data-act="mov" data-t="set">Fijar stock</button></div>')+
     '<label class="lb">Avisar cuando queden ('+big+') o menos<input class="f num" id="min-q" type="number" inputmode="decimal" step="any" value="'+(d.minimo?num(d.minimo)/f:'')+'"></label>'+
     (d.ultimoMov?'<p class="muted" style="font-size:12.5px;margin:0">Último movimiento: '+esc(d.ultimoMov)+'</p>':'');
   return { title: d.nombre, body, foot:'<span class="grow"></span><button class="btn pri" data-act="saveMin" '+(readOnly?'disabled':'')+'>Guardar mínimo</button>' };
@@ -1207,7 +1215,8 @@ SHEETS.pt = function(){
     '<div class="grid2">'+fld('grupo','Grupo',d.grupo,'text','list="dl-grp"')+sel('sector','Dónde está',d.sector||'Cocina',['Cocina','Local'])+'</div>'+
     '<div class="grid3">'+fld('stock','Hay ahora',d.stock,'number')+fld('minimo','Mínimo',d.minimo||'','number')+fld('objetivo','Cantidad ideal',d.objetivo||'','number')+'</div>'+
     '<p class="muted" style="margin:0;font-size:13px">Cuando “hay ahora” llega al mínimo, la producción pide lo que falta para llegar a la cantidad ideal.</p>'+
-    fld('nota','Nota',d.nota)+delBlock('este producto del stock');
+    fld('nota','Nota',d.nota)+delBlock('este producto del stock')+
+    (SH.ptAsk?'<div class="confirm">¿Estás segura de cambiar el stock de '+(Math.round(num(S.stockpt[d.id].stock)*100)/100).toLocaleString('es-AR')+' a '+num(d.stock).toLocaleString('es-AR')+'?<span style="flex:1"></span><button class="btn sm" data-act="ptAskNo">No</button><button class="btn sm pri" data-act="ptAskSi">Sí, guardar</button></div>':'');
   return { title: d.id? d.nombre : 'Nuevo producto en stock', body, foot:(d.id?'<button class="btn danger sm" data-act="delAsk">Borrar</button>':'')+'<span class="grow"></span><button class="btn pri" data-act="savePT" '+(readOnly?'disabled':'')+'>Guardar</button>' };
 };
 SHEETS.emp = function(){
@@ -1661,10 +1670,14 @@ const A = {
   },
   salirTodos: async () => { if(!confirm('Se cierra tu sesión en todos los celulares, tablets y compus donde entraste. ¿Seguir?')) return; await sb.auth.signOut({ scope:'global' }); location.reload(); },
   fPT: el => { U.fPT = el.dataset.v; render(); },
-  ptAdj: el => { const i=S.stockpt[el.dataset.id]; if(!i||readOnly) return; const n=Math.max(0, Math.round((num(i.stock)+num(el.dataset.d))*100)/100); S.stockpt=Object.assign({},S.stockpt,{[i.id]:Object.assign({},i,{stock:n, actualizado:today()})}); render(); savePTSoon(i.id); },
+  ptAdj: el => { const i=S.stockpt[el.dataset.id]; if(!i||readOnly) return; openSheet('ptConf', {id:i.id, d:num(el.dataset.d)}); },
+  ptSi: el => { closeSheet(); const i=S.stockpt[el.dataset.id]; if(!i||readOnly) return; const n=Math.max(0, Math.round((num(i.stock)+num(el.dataset.d))*100)/100); S.stockpt=Object.assign({},S.stockpt,{[i.id]:Object.assign({},i,{stock:n, actualizado:today()})}); render(); savePTSoon(i.id); toast(i.nombre+': stock en '+n.toLocaleString('es-AR')); },
   editPT: el => { const i=S.stockpt[el.dataset.id]; if(i) openSheet('pt', clone(i)); },
   nuevoPT: () => openSheet('pt', {nombre:'', grupo:'', sector: SECTOR==='local'?'Local':'Cocina', stock:0, minimo:'', objetivo:'', nota:''}),
-  savePT: () => { const d=SH.draft; if(!(d.nombre||'').trim()){ toast('Poné el nombre'); return; } d.stock=num(d.stock); d.minimo=num(d.minimo); d.objetivo=num(d.objetivo); d.actualizado=today(); save('stockpt', d); closeSheet(); toast('Guardado'); },
+  ptAskNo: () => { SH.ptAsk=false; renderSheet(); },
+  ptAskSi: () => { SH.ptOk=true; A.savePT(); },
+  savePT: () => { const d=SH.draft; if(!(d.nombre||'').trim()){ toast('Poné el nombre'); return; }
+    if(d.id && S.stockpt[d.id] && num(d.stock)!==num(S.stockpt[d.id].stock) && !SH.ptOk){ SH.ptAsk=true; renderSheet(); return; } d.stock=num(d.stock); d.minimo=num(d.minimo); d.objetivo=num(d.objetivo); d.actualizado=today(); save('stockpt', d); closeSheet(); toast('Guardado'); },
   armarProd: () => { const its=faltantesPT(); if(!its.length) toast('No hay faltantes: ningún producto llegó a su mínimo'); openSheet('orden', {fecha:today(), items:its, origen:'stock', nota:'', armadaPor:''}); },
   ordenManual: () => openSheet('orden', {fecha:today(), items:[], origen:'manual', nota:'', armadaPor:''}),
   editOrden: el => { const o=S.produccion[el.dataset.id]; if(o) openSheet('orden', clone(o)); },
@@ -1775,8 +1788,12 @@ const A = {
     if(SH.orig && SH.orig.precio && d.precio!==SH.orig.precio){ d.precioAnterior=SH.orig.precio; d.precioFecha=today(); } else if(!SH.orig && d.precio){ d.precioFecha=today(); }
     save('insumos', d); closeSheet(); toast('Insumo guardado'); },
   stockMov: el => { const i=S.insumos[el.dataset.id]; if(i) openSheet('stock', clone(i)); },
-  mov: el => { const d=SH.draft; const f=d.unidad==='u'?1:1000; const q=num(document.getElementById('mov-q').value)*f; if(!q && el.dataset.t!=='set'){ toast('Poné una cantidad'); return; }
+  mov: el => { const d=SH.draft; const f=d.unidad==='u'?1:1000; const raw=document.getElementById('mov-q').value; const q=num(raw)*f; if(!q && el.dataset.t!=='set'){ toast('Poné una cantidad'); return; }
     const t=el.dataset.t; const prev=num(d.stock); const ns = t==='in'? prev+q : t==='out'? prev-q : q;
+    SH.movAsk = {t, raw, txt: (t==='in'?'Suma ':t==='out'?'Resta ':'Fija en ')+fmtCant(t==='set'?ns:q,d.unidad)+': queda en '+fmtCant(Math.round(ns*1000)/1000,d.unidad)+'.'}; renderSheet(); },
+  movNo: () => { SH.movAsk=null; renderSheet(); },
+  movSi: () => { const a=SH.movAsk; if(!a) return; const d=SH.draft; const f=d.unidad==='u'?1:1000; const q=num(a.raw)*f; SH.movAsk=null;
+    const t=a.t; const prev=num(d.stock); const ns = t==='in'? prev+q : t==='out'? prev-q : q;
     const label = (t==='in'?'Entró ':t==='out'?'Salió ':'Stock fijado en ')+fmtCant(t==='set'?ns:q,d.unidad)+' · '+fdate(today());
     const body = Object.assign({}, S.insumos[d.id], {stock:Math.round(ns*1000)/1000, ultimoMov:label}); saveInsumoStock(body, {stock:body.stock, ultimoMov:label}); SH.draft=clone(body); renderSheet(); toast('Stock actualizado'); },
   saveMin: () => { const d=SH.draft; const f=d.unidad==='u'?1:1000; const m=num(document.getElementById('min-q').value)*f; saveInsumoStock(Object.assign({}, S.insumos[d.id], {minimo:m}), {minimo:m}); closeSheet(); toast('Mínimo guardado'); },
