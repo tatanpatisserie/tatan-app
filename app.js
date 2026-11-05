@@ -712,7 +712,7 @@ R.clientes = function(){
 /* Doughy no trae tildes ni ñ: en los títulos se muestran sin tilde (Más → Mas), todo en Doughy */
 const CON_TILDE = /[À-ſ]/;
 function arreglarDoughy(root){
-  (root||document).querySelectorAll('h1, h2, .hero .big').forEach(el=>{
+  (root||document).querySelectorAll('h1, h2, .hero .big, .group-h').forEach(el=>{
     const tw = document.createTreeWalker(el, NodeFilter.SHOW_TEXT); let nd;
     while((nd=tw.nextNode())){ if(CON_TILDE.test(nd.nodeValue)) nd.nodeValue = nd.nodeValue.normalize('NFD').replace(/[̀-ͯ]/g,''); }
   });
