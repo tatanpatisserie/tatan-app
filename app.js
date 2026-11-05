@@ -500,6 +500,19 @@ function pedidoItem(p){
 }
 /* ===== PEDIDOS ===== */
 function vistaPedBtns(){ const v=U.pedVista||'semana'; return '<div class="subtabs" style="min-width:180px"><button data-act="pedVista" data-v="semana" aria-pressed="'+(v==='semana')+'">Semana</button><button data-act="pedVista" data-v="lista" aria-pressed="'+(v==='lista')+'">Lista</button></div>'; }
+/* Fecha especial → Cantidad: cuánto hay pedido de cada producto, por fecha de entrega, para saber qué producir */
+function cantidadesFE(arr){
+  const desde = today(); const porFecha = {}; const tot = {};
+  arr.filter(p=>p.estado!=='cancelado' && (p.entrega||'')>=desde).forEach(p=>{ const k=p.entrega||''; const m=porFecha[k]||(porFecha[k]={n:0,prod:{}}); m.n++;
+    (p.items||[]).forEach(l=>{ const nom=(l.nombre||'Sin nombre').trim(); const c=num(l.cant); m.prod[nom]=(m.prod[nom]||0)+c; tot[nom]=(tot[nom]||0)+c; }); });
+  const fechas = Object.keys(porFecha).sort();
+  if(!fechas.length) return '<div class="card empty"><h2>No hay pedidos de fecha especial por delante</h2><p>Cuando se carguen, acá vas a ver cuánto hay que producir de cada producto, día por día.</p></div>';
+  const tabla = prod => '<table class="stat-t"><thead><tr><th>Producto</th><th class="num" style="text-align:right">Cantidad</th></tr></thead><tbody>'+
+    Object.entries(prod).sort((a,b)=>a[0].localeCompare(b[0],'es')).map(([n,c])=>'<tr><td>'+esc(n)+'</td><td class="num" style="text-align:right"><b>'+c.toLocaleString('es-AR')+'</b></td></tr>').join('')+'</tbody></table>';
+  return '<div class="note">Desde hoy en adelante, sin los cancelados. Sirve para saber cuánto producir para cada día.</div>'+
+    fechas.map(k=>'<div class="group-h">'+esc(k?fdateShort(k):'Sin fecha')+' · '+porFecha[k].n+' pedido'+(porFecha[k].n===1?'':'s')+'</div><div class="card">'+tabla(porFecha[k].prod)+'</div>').join('')+
+    (fechas.length>1?'<div class="group-h">Total de todas las fechas</div><div class="card">'+tabla(tot)+'</div>':'');
+}
 R.pedidos = function(){
   const f = U.fPed, q = norm(U.q);
   let arr = pedidosArr();
@@ -512,6 +525,7 @@ R.pedidos = function(){
   if(!may && !fe) arr = arr.filter(p=>!esVentaDia(p));
   if(!may && U.fCanal) arr = arr.filter(p=>(p.canal||'Pedido particular')===U.fCanal);
   if(q) arr = arr.filter(p=> norm(p.clienteNombre+' '+(p.remito||'')+' '+(p.items||[]).map(l=>l.nombre).join(' ')+' '+(p.notas||'')).includes(q));
+  const feCant = (fe && f==='cantidad') ? cantidadesFE(arr) : null;
   arr.sort(byEntrega); if(f==='entregados'||f==='todos') arr.reverse();
   const totalArr = arr.length; const lim = U.pedLim||120; arr = arr.slice(0, lim);
   const groups = []; let cur=null;
@@ -520,11 +534,10 @@ R.pedidos = function(){
   const chip = (k,l) => '<button class="chip" data-act="fPed" data-v="'+k+'" aria-pressed="'+(f===k)+'">'+l+'</button>';
   return `<div class="stack">
     <div class="row between"><h1>Pedidos</h1><div class="row">${vistaPedBtns()}<button class="btn pri sm" data-act="${may?'nuevoMay':fe?'nuevoFE':'nuevoPedido'}">${svg('plus')}${may?'Nuevo mayorista':fe?'Nuevo pedido fecha especial':'Nuevo minorista'}</button></div></div>
-    ${fe?'<div class="note">Esta solapa la vamos a armar a medida más adelante. Por ahora muestra las ventas de fecha especial cargadas.</div>':''}
     <div class="search">${svg('search')}<input class="f" id="qped" placeholder="${may?'Buscar por cliente, remito o producto':'Buscar por cliente o producto'}" value="${esc(U.q)}" data-bind="q"></div>
-    <div class="chips">${chip('activos','Activos')}${chip('deben','Deben plata')}${chip('entregados','Entregados')}${chip('todos','Todos')}
+    <div class="chips">${chip('activos','Activos')}${chip('deben','Deben plata')}${chip('entregados','Entregados')}${chip('todos','Todos')}${fe?chip('cantidad','Cantidad'):''}
       ${may||fe?'':'<select class="chip" id="fcanal" data-bind="fCanal" aria-label="Canal"><option value="">Todos los canales</option>'+CANALES_MIN.map(c=>'<option'+(U.fCanal===c?' selected':'')+'>'+c+'</option>').join('')+'</select>'}</div>
-    ${groups.length ? groups.map(g=>'<div class="group-h">'+esc(gname(g.k))+'</div><div class="list">'+g.items.map(pedidoItem).join('')+'</div>').join('') + (totalArr>lim?'<button class="btn" data-act="masPed">Ver más ('+(totalArr-lim).toLocaleString('es-AR')+')</button>':'') :
+    ${feCant!=null ? feCant : groups.length ? groups.map(g=>'<div class="group-h">'+esc(gname(g.k))+'</div><div class="list">'+g.items.map(pedidoItem).join('')+'</div>').join('') + (totalArr>lim?'<button class="btn" data-act="masPed">Ver más ('+(totalArr-lim).toLocaleString('es-AR')+')</button>':'') :
       (may ? '<div class="card empty"><h2>No hay pedidos mayoristas acá</h2><p>Cargá el pedido con el cliente, el remito y los productos con el precio de la lista mayorista.</p><button class="btn pri" data-act="nuevoMay">Nuevo pedido mayorista</button></div>'
            : fe ? '<div class="card empty"><h2>No hay pedidos de fecha especial acá</h2><p>Cuando carguemos los pedidos de fechas especiales los vas a ver en esta lista.</p></div>'
            : '<div class="card empty"><h2>No hay pedidos acá</h2><p>Cargá un pedido con fecha de entrega, seña y saldo. Lo ves en Inicio y en la lista del día.</p><button class="btn pri" data-act="nuevoPedido">Nuevo pedido</button></div>')}
