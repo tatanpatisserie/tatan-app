@@ -610,7 +610,7 @@ R.mas = function(){
     <button class="item" data-act="verCuentas"><span class="ic">${svg('cash')}</span><div class="main"><span class="t">Cuentas corrientes</span><span class="s">Quién debe y cobrar en el momento</span></div></button>
     ${it('clientes','users','Clientes',Object.keys(S.clientes).length+' clientes · base de datos y contacto')}
     ${it('estadisticas','chart','Pedidos por canal','Qué porcentaje entra por local, WhatsApp y cuenta corriente')}
-    ${it('catalogo','tag','Lista de precios',catalogo().length+' productos')}
+    ${it('catalogo','tag','Listas de precios','Minorista y mayorista, por separado')}
     <button class="item" data-act="nuevoMov"><span class="ic">${svg('receipt')}</span><div class="main"><span class="t">Cargar factura o remito de proveedor</span><span class="s">Se guarda para administración. Después no se ve desde el local.</span></div></button>
   </div></div>`;
   return `<div class="stack"><h1>Más</h1><div class="list morelist">
@@ -621,7 +621,7 @@ R.mas = function(){
     ${it('estadisticas','chart','Estadísticas de ventas','Mes a mes por canal: local, WhatsApp, cuenta corriente, mayoristas')}
     ${it('clientes','users','Clientes',Object.keys(S.clientes).length+' clientes · base de datos y contacto')}
     ${it('cuentas','cash','Cuentas corrientes','Quién debe y cobrar en el momento')}
-    ${it('catalogo','tag','Catálogo y precios',catalogo().length+' productos · ajuste de precios por categoría')}
+    ${it('catalogo','tag','Listas de precios','Minorista y mayorista, por separado')}
     ${it('stockpt','box','Stock de producto terminado',Object.keys(S.stockpt).length+' productos · cocina y local')}
     ${it('stock','box','Stock de mercadería','Materia prima, mínimos y faltantes')}
     ${it('ajustes','gear','Ajustes','Datos del local, hora de trabajo, márgenes')}
@@ -784,17 +784,24 @@ R.estadisticas = function(){
     <div class="note">Se cuentan los pedidos por su fecha de entrega, sin envíos ni IVA. "Pedidos de planilla" son los importados de antes, que no tenían canal.</div>
   </div>`;
 };
+const esListaMin = p => p.cat!=='Mayorista' && !/\(mc\)\s*$/i.test(p.nombre||'');
+const esListaMay = p => num(p.precioMay)>0 || p.cat==='Mayorista';
 R.catalogo = function(){
-  const cats = [...new Set(catalogo().map(p=>p.cat||'Varios'))];
+  const MAY = U.listaPre==='may'; const PK = MAY?'precioMay':'precio';
+  const base = catalogo().filter(MAY?esListaMay:esListaMin);
+  const cats = [...new Set(base.map(p=>p.cat||'Varios'))];
+  if(U.fCat && !cats.includes(U.fCat)) U.fCat='';
   const q = norm(U.qCat);
-  const arr = catalogo().filter(p=>(!U.fCat||p.cat===U.fCat)&&(!q||norm(p.nombre).includes(q)));
+  const arr = base.filter(p=>(!U.fCat||p.cat===U.fCat)&&(!q||norm(p.nombre).includes(q)));
   return `<div class="stack">
     <div class="row between"><a href="#mas" class="muted">‹ Más</a>${verPlata()?`<div class="row"><button class="btn sm" data-act="ajustePrecios">Ajustar precios %</button><button class="btn pri sm" data-act="nuevoProd">${svg('plus')}Producto</button></div>`:''}</div>
-    <h1>Catálogo y precios</h1>
+    <h1>Lista de precios</h1>
+    <div class="subtabs"><button data-act="listaPre" data-v="min" aria-pressed="${!MAY}">Lista minorista</button><button data-act="listaPre" data-v="may" aria-pressed="${MAY}">Lista mayorista</button></div>
+    <div class="note">${MAY?'Precios <b>mayoristas</b>, sin IVA. Son los que usa el pedido mayorista.':'Precios <b>minoristas</b> (local y WhatsApp). Son los que usan los pedidos minoristas y los presupuestos.'}</div>
     <div class="search">${svg('search')}<input class="f" id="qcat" placeholder="Buscar producto" value="${esc(U.qCat)}" data-bind="qCat"></div>
-    <select class="f" id="fcat" data-bind="fCat" aria-label="Categoría"><option value="">Todas las categorías (${catalogo().length})</option>${cats.map(c=>'<option'+(U.fCat===c?' selected':'')+'>'+esc(c)+'</option>').join('')}</select>
-    ${arr.length? '<div class="list">'+arr.slice(0,300).map(p=>{ const c = verPlata() && p.recetaId&&S.recetas[p.recetaId] ? costoProducto(p) : null; const mg = c&&p.precio? (p.precio-c.costo)/p.precio : null;
-      return '<button class="item" data-act="editProd" data-id="'+p.id+'"><div class="main"><span class="t">'+esc(p.nombre)+'</span><span class="s">'+esc(p.cat||'')+(c?' · costo '+$(c.costo):'')+'</span></div><div class="end">'+(p.precio?'<span class="num" style="font-weight:700">'+$(p.precio)+'</span>':'<span class="pill p-neu">A cotizar</span>')+(mg!=null?'<span class="pill '+(mg<.5?'p-warn':'p-ok')+'">'+pct(mg)+'</span>':'')+'</div></button>'; }).join('')+'</div>'+(arr.length>300?'<p class="muted">Mostrando 300 de '+arr.length+'. Buscá para filtrar.</p>':'')
+    <select class="f" id="fcat" data-bind="fCat" aria-label="Categoría"><option value="">Todas las categorías (${base.length})</option>${cats.map(c=>'<option'+(U.fCat===c?' selected':'')+'>'+esc(c)+'</option>').join('')}</select>
+    ${arr.length? '<div class="list">'+arr.slice(0,300).map(p=>{ const c = verPlata() && p.recetaId&&S.recetas[p.recetaId] ? costoProducto(p) : null; const pv=num(p[PK]); const mg = c&&pv? (pv-c.costo)/pv : null;
+      return '<button class="item" data-act="editProd" data-id="'+p.id+'"><div class="main"><span class="t">'+esc(p.nombre)+'</span><span class="s">'+esc(p.cat||'')+(c?' · costo '+$(c.costo):'')+'</span></div><div class="end">'+(pv?'<span class="num" style="font-weight:700">'+$(pv)+'</span>':'<span class="pill p-neu">'+(MAY?'Sin precio':'A cotizar')+'</span>')+(mg!=null?'<span class="pill '+(mg<.5?'p-warn':'p-ok')+'">'+pct(mg)+'</span>':'')+'</div></button>'; }).join('')+'</div>'+(arr.length>300?'<p class="muted">Mostrando 300 de '+arr.length+'. Buscá para filtrar.</p>':'')
       : '<div class="card empty"><p>No hay productos con ese filtro.</p></div>'}
   </div>`;
 };
@@ -1285,21 +1292,23 @@ SHEETS.prod = function(){
   const d = SH.draft; const cats = [...new Set(catalogo().map(p=>p.cat))];
   const recetas = Object.values(S.recetas).sort((a,b)=>(a.nombre||'').localeCompare(b.nombre||''));
   const c = d.recetaId&&S.recetas[d.recetaId] ? costoProducto(d) : null;
-  const body = fld('nombre','Nombre',d.nombre)+'<div class="grid2">'+fld('precio','Precio ($)',d.precio==null?'':d.precio,'number')+'<label class="lb">Categoría<input class="f" id="d-cat" data-d="cat" list="dl-cat" value="'+esc(d.cat||'')+'"></label></div><datalist id="dl-cat">'+cats.map(x=>'<option value="'+esc(x)+'">').join('')+'</datalist>'+
+  const MAY = U.listaPre==='may';
+  const body = fld('nombre','Nombre',d.nombre)+'<div class="grid2">'+(MAY? fld('precioMay','Precio mayorista sin IVA ($)',d.precioMay==null?'':d.precioMay,'number') : fld('precio','Precio minorista ($)',d.precio==null?'':d.precio,'number'))+'<label class="lb">Categoría<input class="f" id="d-cat" data-d="cat" list="dl-cat" value="'+esc(d.cat||'')+'"></label></div><datalist id="dl-cat">'+cats.map(x=>'<option value="'+esc(x)+'">').join('')+'</datalist>'+
+    '<p class="muted" style="margin:0;font-size:13px">'+(MAY? 'Precio minorista: '+(num(d.precio)?$(d.precio):'no está en la lista minorista')+'. Se cambia desde Lista minorista.' : 'Precio mayorista: '+(num(d.precioMay)?$(d.precioMay)+' sin IVA':'no está en la lista mayorista')+'. Se cambia desde Lista mayorista.')+'</p>'+
     '<div class="card stack" style="gap:10px"><h3>Costo</h3>'+sel('recetaId','Receta',d.recetaId||'',[['','Sin receta (costo estimado al '+num(neg().costoDefault)+'%)'],...recetas.map(r=>[r.id,r.nombre])])+
     (d.recetaId?'<div class="grid2">'+fld('factor','Unidades de receta que lleva',d.factor||1,'number')+fld('packaging','Packaging extra ($)',d.packaging||'','number')+'</div>':'')+
     (c?'<div class="note">Costo <b class="num">'+$(c.costo)+'</b>'+(d.precio?' · margen <b>'+pct((num(d.precio)-c.costo)/num(d.precio))+'</b>':'')+' · sugerido '+$(Math.ceil(c.costo*(num(neg().multiplicador)||3)/100)*100)+'</div>':'')+'</div>'+delBlock('este producto');
-  return { title: d.id? 'Producto' : 'Nuevo producto', body, foot:(d.id?'<button class="btn danger sm" data-act="delAsk">Borrar</button>':'')+'<span class="grow"></span><button class="btn pri" data-act="saveProd" '+(readOnly?'disabled':'')+'>Guardar</button>' };
+  return { title: (d.id? 'Producto' : 'Nuevo producto')+(MAY?' mayorista':' minorista'), body, foot:(d.id?'<button class="btn danger sm" data-act="delAsk">Borrar</button>':'')+'<span class="grow"></span><button class="btn pri" data-act="saveProd" '+(readOnly?'disabled':'')+'>Guardar</button>' };
 };
 SHEETS.ajuste = function(){
-  const d = SH.draft; const cats = [...new Set(catalogo().map(p=>p.cat))];
-  const afect = catalogo().filter(p=>p.precio && (!d.cat||p.cat===d.cat));
-  const nuevo = p => Math.round(p.precio*(1+num(d.pct)/100)/num(d.redondeo||1))*num(d.redondeo||1);
+  const d = SH.draft; const MAY = U.listaPre==='may'; const PK = MAY?'precioMay':'precio'; const base = catalogo().filter(MAY?esListaMay:esListaMin); const cats = [...new Set(base.map(p=>p.cat))];
+  const afect = base.filter(p=>num(p[PK]) && (!d.cat||p.cat===d.cat));
+  const nuevo = p => Math.round(num(p[PK])*(1+num(d.pct)/100)/num(d.redondeo||1))*num(d.redondeo||1);
   const ej = afect.slice(0,4);
-  const body = '<p class="muted" style="margin:0">Subí (o bajá) los precios de una categoría o de todo el catálogo de una vez.</p>'+
-    sel('cat','Categoría',d.cat||'',[['','Todo el catálogo'],...cats])+'<div class="grid2">'+fld('pct','Porcentaje (%)',d.pct||'','number','placeholder="Ej: 8"')+sel('redondeo','Redondear a',d.redondeo||100,[[1,'Sin redondeo'],[10,'$ 10'],[100,'$ 100'],[500,'$ 500']])+'</div>'+
-    (num(d.pct)? '<div class="note">Se actualizan <b>'+afect.length+'</b> productos. Ejemplos:<br>'+ej.map(p=>esc(p.nombre)+': '+$(p.precio)+' → <b>'+$(nuevo(p))+'</b>').join('<br>')+'</div>' : '');
-  return { title:'Ajustar precios', body, foot:'<span class="grow"></span><button class="btn pri" data-act="aplicarAjuste" '+(!num(d.pct)||readOnly?'disabled':'')+'>Aplicar a '+afect.length+' productos</button>' };
+  const body = '<div class="note">Cambia solo la <b>lista '+(MAY?'mayorista':'minorista')+'</b>.</div><p class="muted" style="margin:0">Subí (o bajá) los precios de una categoría o de toda la lista de una vez.</p>'+
+    sel('cat','Categoría',d.cat||'',[['','Toda la lista '+(MAY?'mayorista':'minorista')],...cats])+'<div class="grid2">'+fld('pct','Porcentaje (%)',d.pct||'','number','placeholder="Ej: 8"')+sel('redondeo','Redondear a',d.redondeo||100,[[1,'Sin redondeo'],[10,'$ 10'],[100,'$ 100'],[500,'$ 500']])+'</div>'+
+    (num(d.pct)? '<div class="note">Se actualizan <b>'+afect.length+'</b> productos. Ejemplos:<br>'+ej.map(p=>esc(p.nombre)+': '+$(p[PK])+' → <b>'+$(nuevo(p))+'</b>').join('<br>')+'</div>' : '');
+  return { title:'Ajustar precios '+(MAY?'mayoristas':'minoristas'), body, foot:'<span class="grow"></span><button class="btn pri" data-act="aplicarAjuste" '+(!num(d.pct)||readOnly?'disabled':'')+'>Aplicar a '+afect.length+' productos</button>' };
 };
 
 const urgSel = (x,i) => '<div class="urgsel" role="group" aria-label="Urgencia">'+[['','Por hacer'],['urg','Urgente'],['max','URGENTE SÍ O SÍ']].map(([v,l])=>'<button class="u-'+(v||'n')+'" data-act="ordUrg" data-i="'+i+'" data-v="'+v+'" aria-pressed="'+((x.urg||'')===v)+'">'+l+'</button>').join('')+'</div>';
@@ -1920,13 +1929,15 @@ const A = {
     const body = Object.assign({}, S.insumos[d.id], {stock:Math.round(ns*1000)/1000, ultimoMov:label}); saveInsumoStock(body, {stock:body.stock, ultimoMov:label}); SH.draft=clone(body); renderSheet(); toast('Stock actualizado'); },
   saveMin: () => { const d=SH.draft; const f=d.unidad==='u'?1:1000; const m=num(document.getElementById('min-q').value)*f; saveInsumoStock(Object.assign({}, S.insumos[d.id], {minimo:m}), {minimo:m}); closeSheet(); toast('Mínimo guardado'); },
   editProd: el => { if(!verPlata()){ toast('Los precios los cambian las dueñas o administración'); return; } const p=prodById(el.dataset.id); if(p) openSheet('prod', clone(p)); },
-  nuevoProd: () => openSheet('prod', {nombre:'', precio:'', cat: U.fCat||'Varios', recetaId:''}),
-  saveProd: () => { const d=SH.draft; if(!(d.nombre||'').trim()){ toast('Poné el nombre'); return; } d.precio = d.precio===''||d.precio==null? null : num(d.precio); d.factor=num(d.factor)||1; d.packaging=num(d.packaging);
+  nuevoProd: () => openSheet('prod', U.listaPre==='may' ? {nombre:'', precio:null, precioMay:'', cat: U.fCat||'Mayorista', recetaId:''} : {nombre:'', precio:'', cat: U.fCat||'Varios', recetaId:''}),
+  listaPre: el => { U.listaPre = el.dataset.v; U.fCat=''; render(); },
+  saveProd: () => { const d=SH.draft; if(!(d.nombre||'').trim()){ toast('Poné el nombre'); return; } d.precio = d.precio===''||d.precio==null? null : num(d.precio); if('precioMay' in d) d.precioMay = d.precioMay===''||d.precioMay==null? null : num(d.precioMay); d.factor=num(d.factor)||1; d.packaging=num(d.packaging);
     let items = catalogo(); if(d.id) items = items.map(p=>p.id===d.id?d:p); else { d.id='p'+uid(); items = items.concat([d]); }
     saveDoc('catalogo', {items}); closeSheet(); toast('Producto guardado'); },
   ajustePrecios: () => openSheet('ajuste', {cat:U.fCat||'', pct:'', redondeo:100}),
   aplicarAjuste: () => { const d=SH.draft; const r=num(d.redondeo||1); let c=0;
-    const items = catalogo().map(p=>{ if(!p.precio || (d.cat && p.cat!==d.cat)) return p; c++; return Object.assign({}, p, {precio: Math.round(p.precio*(1+num(d.pct)/100)/r)*r}); });
+    const MAY = U.listaPre==='may'; const PK = MAY?'precioMay':'precio';
+    const items = catalogo().map(p=>{ if(!num(p[PK]) || !(MAY?esListaMay(p):esListaMin(p)) || (d.cat && p.cat!==d.cat)) return p; c++; return Object.assign({}, p, {[PK]: Math.round(num(p[PK])*(1+num(d.pct)/100)/r)*r}); });
     saveDoc('catalogo', {items}); closeSheet(); toast(c+' precios actualizados'); },
   guardarAjustes: () => { const o = Object.assign({}, neg()); document.querySelectorAll('[data-neg]').forEach(el=>{ const k=el.dataset.neg; o[k] = ['costoHora','multiplicador','costoDefault','validez','proxPresupuesto'].includes(k)? num(el.value) : el.value; }); saveDoc('negocio', o); toast('Ajustes guardados'); }
 };
