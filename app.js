@@ -307,18 +307,18 @@ function metricas(mes){
   const ganancia = facturado - (usaCompras ? compras : costo) - fijos - variables - sueldos;
   return { compras, usaCompras, sueldos, facturado, costo, envios, entregados, cantPedidos: delMes.length, cobrado, porCobrar, fijos, variables, ganancia, margen: facturado? ganancia/facturado : null, cobertura: facturado? factReal/facturado : 0, rank: Object.values(rank) };
 }
-function saldoCliente(cid){ return sum(pedidosArr().filter(p=>p.clienteId===cid && p.estado!=='cancelado'), p=>Math.max(0,totPedido(p).saldo)); }
+function saldoCliente(cid){ return sum(pedidosArr().filter(p=>p.clienteId===cid && p.estado!=='cancelado' && (SECTOR!=='local' || p.canal!=='Mayorista')), p=>Math.max(0,totPedido(p).saldo)); }
 
 /* ---------- estado de UI ---------- */
 const U = { view:'inicio', mes: today().slice(0,7), fPed:'activos', fCanal:'', q:'', costosTab:'recetas', fCat:'', qCat:'', qIns:'', fInsCat:'' };
-const VIEWS = ['estadisticas','semana','empleados','proveedores','equipo','historial','inicio','pedidos','presupuestos','produccion','stockpt','costos','mas','gastos','clientes','catalogo','stock','ajustes'];
+const VIEWS = ['estadisticas','semana','empleados','proveedores','equipo','historial','inicio','pedidos','presupuestos','produccion','stockpt','costos','mas','gastos','clientes','catalogo','stock','ajustes','cuentas'];
 const TABSETS = {
   todo:[['inicio','Inicio','home'],['pedidos','Pedidos','bag'],['produccion','Producción','whisk'],['presupuestos','Presupuestos','doc'],['mas','Más','dots']],
   local:[['pedidos','Pedidos','bag'],['presupuestos','Presupuestos','doc'],['stockpt','Stock','box'],['produccion','Producción','whisk'],['mas','Más','dots']],
   cocina:[['semana','Semana','bag'],['produccion','Producción','whisk'],['stockpt','Stock','box'],['stock','Mercadería','tag']]
 };
-const ALLOWED = { todo: VIEWS, local:['semana','pedidos','presupuestos','stockpt','produccion','mas','clientes','catalogo','estadisticas'], cocina:['semana','produccion','stockpt','stock'] };
-const SUBOF = {estadisticas:'mas',semana:'produccion',empleados:'mas',proveedores:'mas',equipo:'mas',historial:'mas',gastos:'mas',clientes:'mas',catalogo:'mas',stock:'mas',ajustes:'mas',costos:'mas'};
+const ALLOWED = { todo: VIEWS, local:['semana','pedidos','presupuestos','stockpt','produccion','mas','clientes','cuentas','catalogo','estadisticas'], cocina:['semana','produccion','stockpt','stock'] };
+const SUBOF = {estadisticas:'mas',semana:'produccion',empleados:'mas',proveedores:'mas',equipo:'mas',historial:'mas',gastos:'mas',clientes:'mas',cuentas:'mas',catalogo:'mas',stock:'mas',ajustes:'mas',costos:'mas'};
 const verPlata = () => SECTOR==='todo';
 function route(){ const h = (location.hash||'').slice(1); const ok = ALLOWED[SECTOR]||VIEWS; U.view = (VIEWS.includes(h) && ok.includes(h)) ? h : TABSETS[SECTOR][0][0]; if(U.view==='historial') HIST=null; render(); window.scrollTo(0,0); }
 window.addEventListener('hashchange', route);
@@ -608,7 +608,7 @@ R.mas = function(){
   const m = metricas(U.mes);
   if(SECTOR==='local') return `<div class="stack"><h1>Más</h1><div class="list morelist">
     <button class="item" data-act="verCuentas"><span class="ic">${svg('cash')}</span><div class="main"><span class="t">Cuentas corrientes</span><span class="s">Quién debe y cobrar en el momento</span></div></button>
-    ${it('clientes','users','Clientes',Object.keys(S.clientes).length+' clientes · historial y lo que deben')}
+    ${it('clientes','users','Clientes',Object.keys(S.clientes).length+' clientes · base de datos y contacto')}
     ${it('estadisticas','chart','Pedidos por canal','Qué porcentaje entra por local, WhatsApp y cuenta corriente')}
     ${it('catalogo','tag','Lista de precios',catalogo().length+' productos')}
     <button class="item" data-act="nuevoMov"><span class="ic">${svg('receipt')}</span><div class="main"><span class="t">Cargar factura o remito de proveedor</span><span class="s">Se guarda para administración. Después no se ve desde el local.</span></div></button>
@@ -619,7 +619,8 @@ R.mas = function(){
     ${it('proveedores','box','Proveedores','Facturas, remitos, pagos y cuenta corriente · deuda '+$(deudaTotal()))}
     ${it('gastos','receipt','Gastos','Fijos y variables · '+esc(mesLabel(U.mes))+': '+$(m.fijos+m.variables))}
     ${it('estadisticas','chart','Estadísticas de ventas','Mes a mes por canal: local, WhatsApp, cuenta corriente, mayoristas')}
-    ${it('clientes','users','Clientes',Object.keys(S.clientes).length+' clientes · historial y cuenta corriente')}
+    ${it('clientes','users','Clientes',Object.keys(S.clientes).length+' clientes · base de datos y contacto')}
+    ${it('cuentas','cash','Cuentas corrientes','Quién debe y cobrar en el momento')}
     ${it('catalogo','tag','Catálogo y precios',catalogo().length+' productos · ajuste de precios por categoría')}
     ${it('stockpt','box','Stock de producto terminado',Object.keys(S.stockpt).length+' productos · cocina y local')}
     ${it('stock','box','Stock de mercadería','Materia prima, mínimos y faltantes')}
@@ -691,6 +692,24 @@ R.gastos = function(){
   </div>`;
 };
 R.clientes = function(){
+  const q = norm(U.qCli||''); const ft = U.tCli||''; const LOC = SECTOR==='local';
+  const npeds = {}; pedidosArr().forEach(p=>{ if(p.clienteId && p.estado!=='cancelado') npeds[p.clienteId]=(npeds[p.clienteId]||0)+1; });
+  const arr = Object.values(S.clientes).filter(c=>(!ft || (c.tipo||'Particular')===ft) && (!q || norm([c.nombre,c.telefono,c.razonSocial,c.cuit].filter(Boolean).join(' ')).includes(q)))
+    .sort((a,b)=>(a.nombre||'').localeCompare(b.nombre||'','es'));
+  const chip = (v,l) => '<button class="chip" data-act="tCli" data-v="'+v+'" aria-pressed="'+(ft===v)+'">'+l+'</button>';
+  const cnt = t => Object.values(S.clientes).filter(c=>(c.tipo||'Particular')===t).length;
+  return `<div class="stack">
+    <div class="row between"><a href="#mas" class="muted">‹ Más</a><button class="btn pri sm" data-act="nuevoCliente">${svg('plus')}Cliente</button></div>
+    <h1>Clientes</h1>
+    <p class="muted" style="margin:0">La base de datos de todos los clientes. Lo que deben está en <a href="#cuentas" data-act="verCuentas">Cuentas corrientes</a>.</p>
+    <div class="search">${svg('search')}<input class="f" id="qcli2" placeholder="Buscar por nombre, teléfono, razón social o CUIT" value="${esc(U.qCli||'')}" data-bind="qCli"></div>
+    <div class="chips">${chip('','Todos')}${chip('Particular','Particulares ('+cnt('Particular')+')')}${chip('Cuenta corriente','Cuenta corriente ('+cnt('Cuenta corriente')+')')}${chip('Mayorista','Mayoristas ('+cnt('Mayorista')+')')}${chip('Empresa','Empresas ('+cnt('Empresa')+')')}</div>
+    <p class="muted" style="margin:0;font-size:13px">${arr.length.toLocaleString('es-AR')} cliente${arr.length!==1?'s':''}</p>
+    ${arr.length? '<div class="list">'+arr.slice(0, U.cliLim||200).map(c=>'<button class="item" data-act="verCliente" data-id="'+c.id+'"><div class="main"><span class="t">'+esc(c.nombre)+'</span><span class="s">'+[c.telefono, c.razonSocial, c.cuit?'CUIT '+c.cuit:''].filter(Boolean).map(esc).join(' · ')+((c.telefono||c.razonSocial||c.cuit)?' · ':'')+(npeds[c.id]||0)+' pedido'+(npeds[c.id]===1?'':'s')+'</span></div><div class="end"><span class="pill '+({'Cuenta corriente':'t-cc','Mayorista':'p-acc','Empresa':'p-pis'}[c.tipo]||'p-neu')+'">'+esc(c.tipo||'Particular')+'</span></div></button>').join('')+'</div>'+(arr.length>(U.cliLim||200)?'<button class="btn" data-act="masCli">Ver más</button>':'')
+      : '<div class="card empty"><p>No hay clientes con ese filtro.</p></div>'}
+  </div>`;
+};
+R.cuentas = function(){
   const q = norm(U.q); const LOC = SECTOR==='local';
   if(LOC && !['Cuenta corriente','debe'].includes(U.fCli)) U.fCli='Cuenta corriente';
   const ft = U.fCli||'';
@@ -702,7 +721,7 @@ R.clientes = function(){
   const deudaCC = sum(arr.filter(x=>x.c.tipo==='Cuenta corriente'), x=>x.debe);
   return `<div class="stack">
     <div class="row between"><a href="#mas" class="muted">‹ Más</a><button class="btn pri sm" data-act="nuevoCliente">${svg('plus')}Cliente</button></div>
-    <h1>Clientes</h1>
+    <h1>Cuentas corrientes</h1>
     <div class="search">${svg('search')}<input class="f" id="qcli" placeholder="Buscar por nombre o teléfono" value="${esc(U.q)}" data-bind="q"></div>
     <div class="chips">${LOC? chip('Cuenta corriente','Cuenta corriente')+chip('debe','Minoristas que deben plata') : chip('','Todos')+chip('Cuenta corriente','Cuenta corriente')+chip('debe','Deben plata')+chip('Particular','Particulares')+chip('Mayorista','Mayoristas')}</div>
     ${ft==='Cuenta corriente'?'<div class="note">Cuentas corrientes: deben en total <b>'+$(deudaCC)+'</b>. Tocá una persona para cobrarle en el momento.</div>':''}
@@ -1143,7 +1162,7 @@ SHEETS.gasto = function(){
     '<div class="grid2">'+sel('tipo','Tipo',d.tipo,[['fijo','Fijo (todos los meses)'],['variable','Variable']])+fld('cat','Tipo de gasto',d.cat,'text','list="gcats"')+'<datalist id="gcats">'+[...new Set(['Alquiler','Agua','Abl','Alarma Monitoreada','Basura','Cargas Sociales','Claro','Control Plagas','Facturador','Autonomos','Monotributo','Seguros','Iva','Arba','Limpieza','Sueldos','Mantenimiento','Publicidad','Otros'].concat(Object.values(S.gastos).map(g=>g.cat).filter(Boolean)))].sort().map(c=>'<option value="'+esc(c)+'">').join('')+'</datalist>'+'</div>'+delBlock('este gasto');
   return { title: d.id?'Editar gasto':'Nuevo gasto', body, foot:(d.id?'<button class="btn danger sm" data-act="delAsk">Borrar</button>':'')+'<span class="grow"></span><button class="btn pri" data-act="saveGasto" '+(readOnly?'disabled':'')+'>Guardar</button>' };
 };
-function pendientesCliente(cid){ return pedidosArr().filter(p=>p.clienteId===cid && p.estado!=='cancelado' && totPedido(p).saldo>0.5).sort(byEntrega); }
+function pendientesCliente(cid){ return pedidosArr().filter(p=>p.clienteId===cid && p.estado!=='cancelado' && (SECTOR!=='local' || p.canal!=='Mayorista') && totPedido(p).saldo>0.5).sort(byEntrega); }
 function ccBox(d){
   const debe = saldoCliente(d.id); if(d.tipo!=='Cuenta corriente' && debe<=0.5) return '';
   const pend = pendientesCliente(d.id);
@@ -1219,7 +1238,7 @@ SHEETS.cliente = function(){
   const body = '<div class="grid2">'+fld('nombre','Nombre',d.nombre)+fld('telefono','Teléfono',d.telefono,'tel')+'</div>'+sel('tipo','Tipo',d.tipo||'Particular',['Particular','Mayorista','Empresa','Cuenta corriente'])+
     (['Mayorista','Empresa'].includes(d.tipo)? fld('razonSocial','Razón social',d.razonSocial||'','text','placeholder="Como figura en AFIP"')+'<div class="grid2">'+fld('cuit','CUIT',d.cuit||'','text','inputmode="numeric" placeholder="30-12345678-9"')+sel('condIva','Condición frente al IVA',d.condIva||'Responsable inscripto',['Responsable inscripto','Monotributo','Exento','Consumidor final'])+'</div>'+fld('domicilio','Domicilio fiscal',d.domicilio||'') : '')+
     '<label class="lb">Notas (gustos, alergias, cumpleaños)<textarea class="f" id="d-notas" data-d="notas">'+esc(d.notas||'')+'</textarea></label>'+
-    (d.id? '<div class="tiles" style="grid-template-columns:repeat(3,1fr)"><div class="tile"><span class="k">Pedidos</span><span class="v num">'+ps.filter(p=>p.estado!=='cancelado').length+'</span></div><div class="tile"><span class="k">Comprado</span><span class="v num">'+$(sum(ps.filter(p=>p.estado!=='cancelado'),p=>totPedido(p).total))+'</span></div><div class="tile"><span class="k">Debe</span><span class="v num">'+$(saldoCliente(d.id))+'</span></div></div>'+
+    (d.id && SECTOR==='local' && d.tipo==='Mayorista'? '' : d.id? '<div class="tiles" style="grid-template-columns:repeat(3,1fr)"><div class="tile"><span class="k">Pedidos</span><span class="v num">'+ps.filter(p=>p.estado!=='cancelado').length+'</span></div><div class="tile"><span class="k">Comprado</span><span class="v num">'+$(sum(ps.filter(p=>p.estado!=='cancelado'),p=>totPedido(p).total))+'</span></div><div class="tile"><span class="k">Debe</span><span class="v num">'+$(saldoCliente(d.id))+'</span></div></div>'+
       ccBox(d)+((d.tipo==='Cuenta corriente' || saldoCliente(d.id)>0.5)? estadoCuentaBox(d) : '')+
       '<div class="row between"><h3>Historial</h3><button class="btn sm" data-act="pedidoParaCliente">Nuevo pedido</button></div>'+(ps.length?'<div class="list">'+ps.map(pedidoItem).join('')+'</div>':'<p class="muted">Sin pedidos todavía.</p>') : '')+delBlock('este cliente (sus pedidos quedan)');
   return { title: d.id? d.nombre : 'Nuevo cliente', body, foot:(d.id?'<button class="btn danger sm" data-act="delAsk">Borrar</button>':'')+'<span class="grow"></span><button class="btn pri" data-act="saveCliente" '+(readOnly?'disabled':'')+'>Guardar</button>' };
@@ -1811,7 +1830,8 @@ const A = {
   lNav: el => { const n=+el.dataset.n; if(U.listaTipo==='fe'){ const d=new Date((U.lMes||today().slice(0,7))+'-15T12:00:00'); d.setMonth(d.getMonth()+n); U.lMes=d.toISOString().slice(0,7); } else U.lSem = addDays(U.lSem||lunesDe(today()), n); U.pedLim=120; render(); },
   listaTipo: el => { U.listaTipo = el.dataset.v; U.pedLim = 120; render(); },
   pedTipo: el => { U.pedTipo = el.dataset.v; U.pedLim = 120; render(); },
-  verCuentas: () => { U.fCli='Cuenta corriente'; U.q=''; location.hash='#clientes'; },
+  verCuentas: () => { U.fCli='Cuenta corriente'; U.q=''; location.hash='#cuentas'; },
+  tCli: el => { U.tCli = el.dataset.v; U.cliLim = 200; render(); },
   fCli: el => { U.fCli = el.dataset.v; U.cliLim = 200; render(); },
   masCli: () => { U.cliLim = (U.cliLim||200)+300; render(); },
   cobrarCC: async () => { const d=SH.draft; let monto = num((document.getElementById('cc-monto')||{}).value); const medio=(document.getElementById('cc-medio')||{}).value||'Efectivo';
