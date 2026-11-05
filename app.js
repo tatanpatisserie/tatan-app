@@ -691,10 +691,12 @@ R.gastos = function(){
   </div>`;
 };
 R.clientes = function(){
-  const q = norm(U.q); const ft = U.fCli||'';
-  const arr = Object.values(S.clientes).filter(c=>(!q||norm(c.nombre+' '+(c.telefono||'')).includes(q)) && (!ft || (ft==='debe' ? false : (c.tipo||'Particular')===ft) || ft==='debe'))
-    .map(c=>{ const ps=pedidosArr().filter(p=>p.clienteId===c.id && p.estado!=='cancelado'); return {c, n:ps.length, total:sum(ps,p=>totPedido(p).total), debe:sum(ps,p=>Math.max(0,totPedido(p).saldo))}; })
-    .filter(x=>ft!=='debe' || x.debe>0.5)
+  const q = norm(U.q); const LOC = SECTOR==='local';
+  if(LOC && !['Cuenta corriente','debe'].includes(U.fCli)) U.fCli='Cuenta corriente';
+  const ft = U.fCli||'';
+  const arr = Object.values(S.clientes).filter(c=>(!LOC || c.tipo!=='Mayorista') && (!q||norm(c.nombre+' '+(c.telefono||'')).includes(q)) && (!ft || (ft==='debe' ? false : (c.tipo||'Particular')===ft) || ft==='debe'))
+    .map(c=>{ const ps=pedidosArr().filter(p=>p.clienteId===c.id && p.estado!=='cancelado' && (!LOC || p.canal!=='Mayorista')); return {c, n:ps.length, total:sum(ps,p=>totPedido(p).total), debe:sum(ps,p=>Math.max(0,totPedido(p).saldo))}; })
+    .filter(x=>ft!=='debe' || (x.debe>0.5 && !(LOC && x.c.tipo==='Cuenta corriente')))
     .sort((a,b)=>b.debe-a.debe || (a.c.nombre||'').localeCompare(b.c.nombre||''));
   const chip = (v,l) => '<button class="chip" data-act="fCli" data-v="'+v+'" aria-pressed="'+(ft===v)+'">'+l+'</button>';
   const deudaCC = sum(arr.filter(x=>x.c.tipo==='Cuenta corriente'), x=>x.debe);
@@ -702,7 +704,7 @@ R.clientes = function(){
     <div class="row between"><a href="#mas" class="muted">‹ Más</a><button class="btn pri sm" data-act="nuevoCliente">${svg('plus')}Cliente</button></div>
     <h1>Clientes</h1>
     <div class="search">${svg('search')}<input class="f" id="qcli" placeholder="Buscar por nombre o teléfono" value="${esc(U.q)}" data-bind="q"></div>
-    <div class="chips">${chip('','Todos')}${chip('Cuenta corriente','Cuenta corriente')}${chip('debe','Deben plata')}${chip('Particular','Particulares')}${chip('Mayorista','Mayoristas')}</div>
+    <div class="chips">${LOC? chip('Cuenta corriente','Cuenta corriente')+chip('debe','Minoristas que deben plata') : chip('','Todos')+chip('Cuenta corriente','Cuenta corriente')+chip('debe','Deben plata')+chip('Particular','Particulares')+chip('Mayorista','Mayoristas')}</div>
     ${ft==='Cuenta corriente'?'<div class="note">Cuentas corrientes: deben en total <b>'+$(deudaCC)+'</b>. Tocá una persona para cobrarle en el momento.</div>':''}
     <p class="muted" style="margin:0;font-size:13px">${arr.length.toLocaleString('es-AR')} cliente${arr.length!==1?'s':''}</p>
     ${arr.length? '<div class="list">'+arr.slice(0, U.cliLim||200).map(x=>'<button class="item" data-act="verCliente" data-id="'+x.c.id+'"><div class="main"><span class="t">'+esc(x.c.nombre)+'</span><span class="s">'+esc(x.c.tipo||'Particular')+(x.c.telefono?' · '+esc(x.c.telefono):'')+' · '+x.n+' pedido'+(x.n!==1?'s':'')+'</span></div><div class="end">'+(x.debe>0.5?'<span class="pill p-warn">Debe '+$(x.debe)+'</span>':(x.c.tipo==='Cuenta corriente'?'<span class="pill p-ok">Al día</span>':''))+'</div></button>').join('')+'</div>'+(arr.length>(U.cliLim||200)?'<button class="btn" data-act="masCli">Ver más</button>':'')
