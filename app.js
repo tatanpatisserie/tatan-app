@@ -818,28 +818,23 @@ function progresoPill(p){ const its=p.items||[]; if(!its.length || p.estado==='e
 function estadoPT(i){ const s=num(i.stock); if(s<=0) return ['Sin stock','p-bad',0]; if(num(i.minimo)>0 && s<=num(i.minimo)) return ['Bajo mínimo','p-warn',1]; return ['OK','p-ok',2]; }
 function faltantesPT(){ return Object.values(S.stockpt).filter(i=>num(i.minimo)>0 && num(i.stock)<=num(i.minimo)).map(i=>{ const meta = num(i.objetivo)>num(i.minimo) ? num(i.objetivo) : num(i.minimo)*2; return {stockId:i.id, nombre:i.nombre, cant: Math.max(1, Math.ceil(meta-num(i.stock))), listo:false}; }); }
 const check = (on, act, attrs) => '<button class="ck'+(on?' on':'')+'" data-act="'+act+'" '+attrs+' aria-pressed="'+(!!on)+'" aria-label="'+(on?'Marcar como pendiente':'Marcar como listo')+'">'+(on?'✓':'')+'</button>';
+function diaProd(f){ if(f===today()) return 'de hoy'; if(f===addDays(today(),1)) return 'de mañana'; return 'del '+fdateShort(f); }
+function ordDelDia(f, sinId){ return Object.values(S.produccion).find(o=>!o.archivada && o.fecha===f && o.id!==sinId); }
+function sumarItems(base, nuevos){ const out=clone(base||[]); (nuevos||[]).forEach(n=>{ const k=n.stockId?'s:'+n.stockId:'n:'+norm(n.nombre); const e=out.find(x=>(x.stockId?'s:'+x.stockId:'n:'+norm(x.nombre))===k && !x.listo); if(e) e.cant=num(e.cant)+num(n.cant); else out.push(Object.assign({},n,{listo:false})); }); return out; }
 R.produccion = function(){
-  const peds = pedidosArr().filter(p=>['pendiente','produccion','listo'].includes(p.estado||'pendiente') && (p.entrega||'') <= addDays(today(),2)).sort(byEntrega);
   const ords = Object.values(S.produccion).filter(o=>!o.archivada).sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||'') || (a.creado||'').localeCompare(b.creado||''));
   const falt = faltantesPT().length;
-  const pedCard = p => { const its=p.items||[]; const l=its.filter(x=>x.listo).length;
-    return '<div class="card stack" style="gap:8px"><div class="row between" style="align-items:flex-start"><div><h3>'+esc(p.clienteNombre||'Sin nombre')+'</h3><span class="muted" style="font-size:12.5px">'+(p.entrega===today()?'Hoy':fdateShort(p.entrega))+(p.hora?' · '+esc(p.hora):'')+' · '+esc(p.canal||'Pedido')+'</span></div><span class="pill '+(l===its.length&&its.length?'p-ok':l?'p-pis':'p-neu')+'">'+l+'/'+its.length+'</span></div>'+
-      '<div class="bar"><i style="width:'+(its.length?l/its.length*100:0)+'%"></i></div>'+
-      '<div class="cklist">'+its.map((x,i)=>'<div class="ckrow'+(x.listo?' done':'')+'">'+check(x.listo,'tglPed','data-id="'+p.id+'" data-i="'+i+'"')+'<span class="ckn"><b class="num">'+esc(x.cant)+'</b> '+esc(x.nombre)+'</span></div>').join('')+'</div>'+
-      (p.notas?'<div class="note">'+esc(p.notas)+'</div>':'')+'</div>'; };
   const ordCard = o => { const its=o.items||[]; const l=its.filter(x=>x.listo).length; const done = its.length && l===its.length;
-    return '<div class="card stack" style="gap:8px"><div class="row between" style="align-items:flex-start"><div><h3>Producción '+(o.fecha===today()?'de hoy':fdateShort(o.fecha))+'</h3><span class="muted" style="font-size:12.5px">'+(o.origen==='stock'?'Faltantes del stock':'Orden manual')+(o.armadaPor?' · armó '+esc(o.armadaPor):'')+'</span></div><span class="pill '+(done?'p-ok':l?'p-pis':'p-neu')+'">'+l+'/'+its.length+'</span></div>'+
+    return '<div class="card stack" style="gap:8px"><div class="row between" style="align-items:flex-start"><div><h3>Producción '+diaProd(o.fecha)+'</h3><span class="muted" style="font-size:12.5px">'+(o.origen==='stock'?'Faltantes del stock':o.origen==='mixta'?'Faltantes + orden':'Orden manual')+(o.armadaPor?' · armó '+esc(o.armadaPor):'')+'</span></div><span class="pill '+(done?'p-ok':l?'p-pis':'p-neu')+'">'+l+'/'+its.length+'</span></div>'+
       '<div class="bar"><i style="width:'+(its.length?l/its.length*100:0)+'%"></i></div>'+
       '<div class="cklist">'+its.map((x,i)=>'<div class="ckrow'+(x.listo?' done':'')+'">'+check(x.listo,'tglProd','data-id="'+o.id+'" data-i="'+i+'"')+'<span class="ckn"><b class="num">'+esc(x.cant)+'</b> '+esc(x.nombre)+'</span></div>').join('')+'</div>'+
       (o.nota?'<div class="note">'+esc(o.nota)+'</div>':'')+
       '<div class="row" style="justify-content:flex-end">'+(SECTOR!=='cocina'?'<button class="btn sm ghost" data-act="editOrden" data-id="'+o.id+'">Editar</button>':'')+(done?'<button class="btn sm" data-act="archivarOrden" data-id="'+o.id+'">Archivar</button>':'')+'</div></div>'; };
   return `<div class="stack">
     <div class="row between"><h1>Producción</h1>${SECTOR!=='cocina'?`<div class="row"><button class="btn sm" data-act="ordenManual">${svg('plus')}Orden</button><button class="btn pri sm" data-act="armarProd">Armar con faltantes${falt?' ('+falt+')':''}</button></div>`:''}</div>
-    <p class="muted" style="margin:0">${SECTOR==='cocina'?'Tildá cada cosa cuando esté lista. El local lo ve al instante.':'La cocina tilda lo que va terminando. Al tildar una producción para stock, se suma sola al stock de producto terminado.'}</p>
-    <div class="sec" style="margin-top:6px"><div class="sec-h"><h2>Pedidos a preparar</h2><span class="muted" style="font-size:12.5px">hasta ${fdateShort(addDays(today(),2))}</span></div>
-      ${peds.length? '<div class="stack">'+peds.map(pedCard).join('')+'</div>' : '<div class="card empty"><p>No hay pedidos para hoy ni los próximos dos días.</p></div>'}</div>
-    <div class="sec"><div class="sec-h"><h2>Producción para stock</h2></div>
-      ${ords.length? '<div class="stack">'+ords.map(ordCard).join('')+'</div>' : '<div class="card empty"><p>No hay órdenes de producción abiertas.'+(SECTOR!=='cocina'?' Cuando el local cuenta el stock, “Armar con faltantes” arma la orden sola.':'')+'</p></div>'}</div>
+    <p class="muted" style="margin:0">${SECTOR==='cocina'?'Tildá cada cosa cuando esté lista. El local lo ve al instante.':'Hay una producción por día. La cocina tilda lo que va terminando y, si es un producto del stock, se suma solo.'}</p>
+    <div class="sec" style="margin-top:6px"><div class="sec-h"><h2>Producción por día</h2></div>
+      ${ords.length? '<div class="stack">'+ords.map(ordCard).join('')+'</div>' : '<div class="card empty"><p>Todavía no hay producción armada.'+(SECTOR!=='cocina'?' Armala con “Armar con faltantes” o con “Orden”: todo lo de un mismo día queda en una sola producción.':'')+'</p></div>'}</div>
   </div>`;
 };
 R.stockpt = function(){
@@ -1205,12 +1200,13 @@ SHEETS.orden = function(){
   const d = SH.draft; const q = norm(SH.q);
   const res = q.length>=2 ? Object.values(S.stockpt).filter(i=>norm(i.nombre).includes(q)).slice(0,8) : [];
   const body = '<div class="grid2">'+fld('fecha','Fecha',d.fecha,'date')+fld('armadaPor','La armó',d.armadaPor||'','text','placeholder="Ej: Martina"')+'</div>'+
+    (ordDelDia(d.fecha, d.id)?'<div class="note">Ya hay una producción '+diaProd(d.fecha)+'. Lo que cargues acá se suma a esa.</div>':'')+
     '<div class="stack" style="gap:8px"><h3>Qué producir</h3><div class="lines">'+((d.items||[]).map((x,i)=>'<div class="line" style="grid-template-columns:1fr 80px 30px"><div class="nm">'+esc(x.nombre)+(x.stockId&&S.stockpt[x.stockId]?'<small>hay '+num(S.stockpt[x.stockId].stock)+' · suma al stock al tildar</small>':'<small>no suma al stock</small>')+'</div><input class="f num" id="oi-'+i+'" data-oi="'+i+'" type="number" inputmode="decimal" step="any" value="'+esc(x.cant)+'" aria-label="Cantidad"><button class="rm" data-act="rmOrdItem" data-i="'+i+'" aria-label="Quitar">×</button></div>').join('') || '<div class="muted" style="font-size:13px">No hay nada para producir. Buscá productos abajo.</div>')+'</div>'+
     '<div class="search">'+svg('search')+'<input class="f" id="ordq" data-sq="1" placeholder="Agregar producto del stock: escribí 2 letras" value="'+esc(SH.q)+'" autocomplete="off"></div>'+
     (res.length?'<div class="results">'+res.map(i=>'<button data-act="addOrdItem" data-id="'+i.id+'"><span>'+esc(i.nombre)+'</span><span class="muted num">hay '+num(i.stock)+'</span></button>').join('')+'</div>':'')+
     (q.length>=2?'<button class="btn sm ghost" data-act="addOrdFree">+ Agregar “'+esc(SH.q)+'” como ítem libre</button>':'')+'</div>'+
-    '<label class="lb">Nota para la cocina<textarea class="f" id="d-nota" data-d="nota">'+esc(d.nota||'')+'</textarea></label>'+delBlock('esta orden');
-  return { title: d.id?'Orden de producción':'Nueva orden de producción', body, foot:(d.id?'<button class="btn danger sm" data-act="delAsk">Borrar</button>':'')+'<span class="grow"></span><button class="btn pri" data-act="saveOrden" '+(readOnly?'disabled':'')+'>'+(d.id?'Guardar':'Enviar a cocina')+'</button>' };
+    '<label class="lb">Nota para la cocina<textarea class="f" id="d-nota" data-d="nota">'+esc(d.nota||'')+'</textarea></label>'+delBlock('esta producción');
+  return { title: d.id?'Producción '+diaProd(d.fecha):'Nueva producción', body, foot:(d.id?'<button class="btn danger sm" data-act="delAsk">Borrar</button>':'')+'<span class="grow"></span><button class="btn pri" data-act="saveOrden" '+(readOnly?'disabled':'')+'>'+(d.id?'Guardar':'Enviar a cocina')+'</button>' };
 };
 SHEETS.pt = function(){
   const d = SH.draft; const grupos=[...new Set(Object.values(S.stockpt).map(i=>i.grupo).filter(Boolean))];
@@ -1685,13 +1681,17 @@ const A = {
   savePT: () => { const d=SH.draft; if(!(d.nombre||'').trim()){ toast('Poné el nombre'); return; }
     if(SECTOR==='cocina'){ const o=S.stockpt[d.id]||{}; d.minimo=o.minimo||''; d.objetivo=o.objetivo||''; }
     if(d.id && S.stockpt[d.id] && num(d.stock)!==num(S.stockpt[d.id].stock) && !SH.ptOk){ SH.ptAsk=true; renderSheet(); return; } d.stock=num(d.stock); d.minimo=num(d.minimo); d.objetivo=num(d.objetivo); d.actualizado=today(); save('stockpt', d); closeSheet(); toast('Guardado'); },
-  armarProd: () => { const its=faltantesPT(); if(!its.length) toast('No hay faltantes: ningún producto llegó a su mínimo'); openSheet('orden', {fecha:today(), items:its, origen:'stock', nota:'', armadaPor:''}); },
+  armarProd: () => { const its=faltantesPT(); if(!its.length) toast('No hay faltantes: ningún producto llegó a su mínimo'); const o=ordDelDia(today());
+    if(o){ const d=clone(o); const ya=new Set((d.items||[]).filter(x=>x.stockId).map(x=>x.stockId)); d.items=(d.items||[]).concat(its.filter(x=>!ya.has(x.stockId))); if(d.origen==='manual'&&its.length) d.origen='mixta'; openSheet('orden', d); }
+    else openSheet('orden', {fecha:today(), items:its, origen:'stock', nota:'', armadaPor:''}); },
   ordenManual: () => openSheet('orden', {fecha:today(), items:[], origen:'manual', nota:'', armadaPor:''}),
   editOrden: el => { const o=S.produccion[el.dataset.id]; if(o) openSheet('orden', clone(o)); },
   addOrdItem: el => { const i=S.stockpt[el.dataset.id]; if(!i) return; const meta = num(i.objetivo)>num(i.stock)? num(i.objetivo)-num(i.stock) : 1; SH.draft.items.push({stockId:i.id, nombre:i.nombre, cant:Math.ceil(meta), listo:false}); SH.q=''; renderSheet(); },
   addOrdFree: () => { SH.draft.items.push({stockId:'', nombre:SH.q.trim(), cant:1, listo:false}); SH.q=''; renderSheet(); },
   rmOrdItem: el => { SH.draft.items.splice(+el.dataset.i,1); renderSheet(); },
-  saveOrden: () => { const d=SH.draft; if(!(d.items||[]).length){ toast('Agregá al menos un producto'); return; } d.items=d.items.map(x=>Object.assign({},x,{cant:num(x.cant)||1})); if(!d.creado) d.creado=new Date().toISOString(); const nuevo=!d.id; save('produccion', d); closeSheet(); toast(nuevo?'Orden enviada a cocina':'Orden guardada'); },
+  saveOrden: () => { const d=SH.draft; if(!(d.items||[]).length){ toast('Agregá al menos un producto'); return; } d.items=d.items.map(x=>Object.assign({},x,{cant:num(x.cant)||1})); if(!d.creado) d.creado=new Date().toISOString(); const otra=ordDelDia(d.fecha, d.id);
+    if(otra){ const m=Object.assign({},otra,{items:sumarItems(otra.items,d.items), origen:otra.origen===d.origen?otra.origen:'mixta', nota:[otra.nota,d.nota].filter(Boolean).join(' · '), armadaPor:otra.armadaPor||d.armadaPor}); save('produccion', m); if(d.id) remove('produccion', d.id); closeSheet(); toast('Sumado a la producción '+diaProd(d.fecha)); return; }
+    const nuevo=!d.id; save('produccion', d); closeSheet(); toast(nuevo?'Producción enviada a cocina':'Producción guardada'); },
   archivarOrden: el => { const o=S.produccion[el.dataset.id]; if(o) save('produccion', Object.assign({},o,{archivada:true})); toast('Orden archivada'); },
   tglProd: el => { const o=S.produccion[el.dataset.id]; if(!o||readOnly) return; const its=clone(o.items||[]); const x=its[+el.dataset.i]; if(!x) return; x.listo=!x.listo; x.listoEn = x.listo? new Date().toISOString() : '';
     save('produccion', Object.assign({},o,{items:its}));
@@ -1831,7 +1831,7 @@ document.addEventListener('input', ev => {
   const d = SH.draft;
   if(el.dataset.d==='telefono'){ d.telefono = el.value; const c = clientePorTel(el.value); if(c && SH.type!=='cliente'){ if(!d.clienteNombre || d._autoNom){ d.clienteNombre = c.nombre; d.clienteId = c.id; d._autoNom = true; } renderSheetSoft(); } return; }
   if(el.dataset.d==='clienteNombre'){ d._autoNom = false; if(esCC(d)) renderSheetSoft(); }
-  if(el.dataset.d){ setPath(d, el.dataset.d, el.value); if(['descuento','envio','invitados','precio','presentacion','unidad','recetaId','factor','packaging','minutos','rinde','extra','pct','redondeo','cat','canal','ingreso','egreso','tarifa','neto','iva','percepciones','cant'].includes(el.dataset.d) && el.tagName!=='TEXTAREA') renderSheetSoft(); return; }
+  if(el.dataset.d){ setPath(d, el.dataset.d, el.value); if(['descuento','envio','invitados','precio','presentacion','unidad','recetaId','factor','packaging','minutos','rinde','extra','pct','redondeo','cat','canal','ingreso','egreso','tarifa','neto','iva','percepciones','cant','fecha'].includes(el.dataset.d) && el.tagName!=='TEXTAREA') renderSheetSoft(); return; }
   if(el.dataset.it!=null){ d.items[+el.dataset.it][el.dataset.k] = el.value; renderSheetSoft(); return; }
   if(el.dataset.pg!=null){ d.pagos[+el.dataset.pg][el.dataset.k] = el.value; renderSheetSoft(); return; }
   if(el.dataset.oi!=null){ d.items[+el.dataset.oi].cant = el.value; return; }
