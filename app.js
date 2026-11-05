@@ -821,20 +821,27 @@ const check = (on, act, attrs) => '<button class="ck'+(on?' on':'')+'" data-act=
 function diaProd(f){ if(f===today()) return 'de hoy'; if(f===addDays(today(),1)) return 'de mañana'; return 'del '+fdateShort(f); }
 function ordDelDia(f, sinId){ return Object.values(S.produccion).find(o=>!o.archivada && o.fecha===f && o.id!==sinId); }
 function sumarItems(base, nuevos){ const out=clone(base||[]); (nuevos||[]).forEach(n=>{ const k=n.stockId?'s:'+n.stockId:'n:'+norm(n.nombre); const e=out.find(x=>(x.stockId?'s:'+x.stockId:'n:'+norm(x.nombre))===k && !x.listo); if(e) e.cant=num(e.cant)+num(n.cant); else out.push(Object.assign({},n,{listo:false})); }); return out; }
+const DIAS_L = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'], MESES_L = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+function fdiaLargo(iso){ const d=new Date(iso+'T12:00:00'); return DIAS_L[d.getDay()]+' '+d.getDate()+' de '+MESES_L[d.getMonth()]; }
 R.produccion = function(){
-  const ords = Object.values(S.produccion).filter(o=>!o.archivada).sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||'') || (a.creado||'').localeCompare(b.creado||''));
+  const dia = U.pDia || (U.pDia = today());
+  const ords = Object.values(S.produccion).filter(o=>o.fecha===dia).sort((a,b)=>(a.archivada?1:0)-(b.archivada?1:0) || (a.creado||'').localeCompare(b.creado||''));
+  const prox = [...new Set(Object.values(S.produccion).filter(o=>!o.archivada && (o.fecha||'')>=today() && o.fecha!==dia).map(o=>o.fecha))].sort().slice(0,8);
+  const rel = dia===today()?'Hoy':dia===addDays(today(),1)?'Mañana':dia===addDays(today(),-1)?'Ayer':'';
+  const bar = '<div class="monthbar"><button class="btn" data-act="pNav" data-n="-1" aria-label="Día anterior">‹</button><div style="text-align:center"><div class="eyebrow">'+(rel||'Producción del día')+'</div><div class="row" style="gap:8px;justify-content:center"><h2>'+esc(fdiaLargo(dia))+'</h2><label class="calbtn" title="Elegir día">'+svg('calendar')+'<input type="date" data-chg="pDiaPick" value="'+dia+'" aria-label="Elegir día"></label></div>'+(dia!==today()?'<button class="btn sm ghost" data-act="pHoy" style="margin-top:4px">Volver a hoy</button>':'')+'</div><button class="btn" data-act="pNav" data-n="1" aria-label="Día siguiente">›</button></div>';
   const falt = faltantesPT().length;
   const ordCard = o => { const its=o.items||[]; const l=its.filter(x=>x.listo).length; const done = its.length && l===its.length;
     return '<div class="card stack" style="gap:8px"><div class="row between" style="align-items:flex-start"><div><h3>Producción '+diaProd(o.fecha)+'</h3><span class="muted" style="font-size:12.5px">'+(o.origen==='stock'?'Faltantes del stock':o.origen==='mixta'?'Faltantes + orden':'Orden manual')+(o.armadaPor?' · armó '+esc(o.armadaPor):'')+'</span></div><span class="pill '+(done?'p-ok':l?'p-pis':'p-neu')+'">'+l+'/'+its.length+'</span></div>'+
       '<div class="bar"><i style="width:'+(its.length?l/its.length*100:0)+'%"></i></div>'+
       '<div class="cklist">'+its.map((x,i)=>'<div class="ckrow'+(x.listo?' done':'')+'">'+check(x.listo,'tglProd','data-id="'+o.id+'" data-i="'+i+'"')+'<span class="ckn"><b class="num">'+esc(x.cant)+'</b> '+esc(x.nombre)+'</span></div>').join('')+'</div>'+
       (o.nota?'<div class="note">'+esc(o.nota)+'</div>':'')+
-      '<div class="row" style="justify-content:flex-end">'+(SECTOR!=='cocina'?'<button class="btn sm ghost" data-act="editOrden" data-id="'+o.id+'">Editar</button>':'')+(done?'<button class="btn sm" data-act="archivarOrden" data-id="'+o.id+'">Archivar</button>':'')+'</div></div>'; };
+      '<div class="row" style="justify-content:flex-end">'+(SECTOR!=='cocina'?'<button class="btn sm ghost" data-act="editOrden" data-id="'+o.id+'">Editar</button>':'')+(done&&!o.archivada?'<button class="btn sm" data-act="archivarOrden" data-id="'+o.id+'">Archivar</button>':'')+'</div></div>'; };
   return `<div class="stack">
     <div class="row between"><h1>Producción</h1>${SECTOR!=='cocina'?`<div class="row"><button class="btn sm" data-act="ordenManual">${svg('plus')}Orden</button><button class="btn pri sm" data-act="armarProd">Armar con faltantes${falt?' ('+falt+')':''}</button></div>`:''}</div>
     <p class="muted" style="margin:0">${SECTOR==='cocina'?'Tildá cada cosa cuando esté lista. El local lo ve al instante.':'Hay una producción por día. La cocina tilda lo que va terminando. El stock no cambia solo: se actualiza a mano desde Stock.'}</p>
-    <div class="sec" style="margin-top:6px"><div class="sec-h"><h2>Producción por día</h2></div>
-      ${ords.length? '<div class="stack">'+ords.map(ordCard).join('')+'</div>' : '<div class="card empty"><p>Todavía no hay producción armada.'+(SECTOR!=='cocina'?' Armala con “Armar con faltantes” o con “Orden”: todo lo de un mismo día queda en una sola producción.':'')+'</p></div>'}</div>
+    ${bar}
+      ${ords.length? '<div class="stack">'+ords.map(ordCard).join('')+'</div>' : '<div class="card empty"><p>No hay producción para este día.'+(SECTOR!=='cocina'?' Cargala con “Orden” o con “Armar con faltantes”.':'')+'</p></div>'}
+    ${prox.length?'<div class="sec"><div class="sec-h"><h2>Próximas producciones</h2></div><div class="chips">'+prox.map(f=>'<button class="chip" data-act="pIr" data-v="'+f+'">'+esc(fdateShort(f))+'</button>').join('')+'</div></div>':''}
   </div>`;
 };
 R.stockpt = function(){
@@ -1681,15 +1688,19 @@ const A = {
   savePT: () => { const d=SH.draft; if(!(d.nombre||'').trim()){ toast('Poné el nombre'); return; }
     if(SECTOR==='cocina'){ const o=S.stockpt[d.id]||{}; d.minimo=o.minimo||''; d.objetivo=o.objetivo||''; }
     if(d.id && S.stockpt[d.id] && num(d.stock)!==num(S.stockpt[d.id].stock) && !SH.ptOk){ SH.ptAsk=true; renderSheet(); return; } d.stock=num(d.stock); d.minimo=num(d.minimo); d.objetivo=num(d.objetivo); d.actualizado=today(); save('stockpt', d); closeSheet(); toast('Guardado'); },
-  armarProd: () => { const its=faltantesPT(); if(!its.length) toast('No hay faltantes: ningún producto llegó a su mínimo'); const o=ordDelDia(today());
+  armarProd: () => { const its=faltantesPT(); if(!its.length) toast('No hay faltantes: ningún producto llegó a su mínimo'); const o=ordDelDia(U.pDia||today());
     if(o){ const d=clone(o); const ya=new Set((d.items||[]).filter(x=>x.stockId).map(x=>x.stockId)); d.items=(d.items||[]).concat(its.filter(x=>!ya.has(x.stockId))); if(d.origen==='manual'&&its.length) d.origen='mixta'; openSheet('orden', d); }
-    else openSheet('orden', {fecha:today(), items:its, origen:'stock', nota:'', armadaPor:''}); },
-  ordenManual: () => openSheet('orden', {fecha:today(), items:[], origen:'manual', nota:'', armadaPor:''}),
+    else openSheet('orden', {fecha:U.pDia||today(), items:its, origen:'stock', nota:'', armadaPor:''}); },
+  ordenManual: () => openSheet('orden', {fecha:U.pDia||today(), items:[], origen:'manual', nota:'', armadaPor:''}),
+  pNav: el => { U.pDia = addDays(U.pDia||today(), +el.dataset.n); render(); },
+  pDiaPick: el => { if(el.value){ U.pDia = el.value; render(); } },
+  pHoy: () => { U.pDia = today(); render(); },
+  pIr: el => { U.pDia = el.dataset.v; render(); },
   editOrden: el => { const o=S.produccion[el.dataset.id]; if(o) openSheet('orden', clone(o)); },
   addOrdItem: el => { const i=S.stockpt[el.dataset.id]; if(!i) return; const meta = num(i.objetivo)>num(i.stock)? num(i.objetivo)-num(i.stock) : 1; SH.draft.items.push({stockId:i.id, nombre:i.nombre, cant:Math.ceil(meta), listo:false}); SH.q=''; renderSheet(); },
   addOrdFree: () => { SH.draft.items.push({stockId:'', nombre:SH.q.trim(), cant:1, listo:false}); SH.q=''; renderSheet(); },
   rmOrdItem: el => { SH.draft.items.splice(+el.dataset.i,1); renderSheet(); },
-  saveOrden: () => { const d=SH.draft; if(!(d.items||[]).length){ toast('Agregá al menos un producto'); return; } d.items=d.items.map(x=>Object.assign({},x,{cant:num(x.cant)||1})); if(!d.creado) d.creado=new Date().toISOString(); const otra=ordDelDia(d.fecha, d.id);
+  saveOrden: () => { const d=SH.draft; if(!(d.items||[]).length){ toast('Agregá al menos un producto'); return; } d.items=d.items.map(x=>Object.assign({},x,{cant:num(x.cant)||1})); if(!d.creado) d.creado=new Date().toISOString(); U.pDia=d.fecha; const otra=ordDelDia(d.fecha, d.id);
     if(otra){ const m=Object.assign({},otra,{items:sumarItems(otra.items,d.items), origen:otra.origen===d.origen?otra.origen:'mixta', nota:[otra.nota,d.nota].filter(Boolean).join(' · '), armadaPor:otra.armadaPor||d.armadaPor}); save('produccion', m); if(d.id) remove('produccion', d.id); closeSheet(); toast('Sumado a la producción '+diaProd(d.fecha)); return; }
     const nuevo=!d.id; save('produccion', d); closeSheet(); toast(nuevo?'Producción enviada a cocina':'Producción guardada'); },
   archivarOrden: el => { const o=S.produccion[el.dataset.id]; if(o) save('produccion', Object.assign({},o,{archivada:true})); toast('Orden archivada'); },
