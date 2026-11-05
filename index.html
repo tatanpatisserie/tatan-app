@@ -127,6 +127,7 @@ label.lb{display:flex;flex-direction:column;gap:4px;font-size:12.5px;font-weight
 .item{display:flex;gap:12px;align-items:center;padding:12px 14px;border-top:1px solid var(--line);cursor:pointer;background:none;border-left:0;border-right:0;border-bottom:0;text-align:left;width:100%}
 .item:first-child{border-top:0}
 .item:hover{background:var(--surface-2)}
+.list.ptgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:10px;background:none;border:0;border-radius:0;overflow:visible}.ptgrid>.item{border:1px solid var(--line);border-radius:var(--r);background:var(--surface)}
 .itemwrap{display:flex;align-items:center;gap:8px;border-top:1px solid var(--line);padding-right:12px}.itemwrap>.item{border-top:0;flex:1;min-width:0}.itemwrap .ent{flex-shrink:0}
 .item .main{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
 .item .t{font-weight:650;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -267,8 +268,8 @@ table.tbl{border-collapse:collapse;width:100%;font-size:13.5px}
 </div>
 <div id="toast" class="toast" hidden></div>
 <script src="vendor/supabase.js"></script>
-<script src="config.js?v=20261105a"></script>
+<script src="config.js?v=20261105b"></script>
 
-<script src="app.js?v=20261105a"></script>
+<script src="app.js?v=20261105b"></script>
 </body>
 </html>
